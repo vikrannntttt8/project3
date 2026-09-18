@@ -306,9 +306,7 @@ const FEATURED = [
 function HomeDefault({ onPlaySong }) {
   const { loadSong } = usePlayer();
   const [loadingId, setLoadingId] = useState(null);
-  const { searchSongs } = require || {};
 
-  // Lazy import to avoid circular
   const playSuggestion = async (query, cardId) => {
     setLoadingId(cardId);
     try {
