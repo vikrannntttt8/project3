@@ -44,10 +44,18 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // Load YouTube IFrame API script dynamically on app mount if not present
+    if (!window.YT && !document.getElementById('youtube-iframe-api-script')) {
+      const script = document.createElement('script');
+      script.id = 'youtube-iframe-api-script';
+      script.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(script);
+    }
+
     const setupPlayer = () => {
       if (window.YT && window.YT.Player && !ytPlayerRef.current) {
         try {
-          ytPlayerRef.current = new window.YT.Player('pulse-yt-player', {
+          ytPlayerRef.current = new window.YT.Player('youtube-player-container', {
             height: '200',
             width: '200',
             playerVars: {
@@ -104,19 +112,6 @@ export function PlayerProvider({ children }) {
               onError: (err) => {
                 console.warn('[YouTube Player] Playback error code:', err?.data);
                 setIsLoading(false);
-                // On embed restriction (code 101/150), fallback to general search query
-                if (err?.data === 101 || err?.data === 150) {
-                  const active = currentSongRef.current;
-                  if (active) {
-                    const fallbackQuery = `${active.title} audio`;
-                    ytPlayerRef.current?.loadPlaylist({
-                      listType: 'search',
-                      list: fallbackQuery,
-                      index: 0,
-                      startSeconds: 0,
-                    });
-                  }
-                }
               },
             },
           });
@@ -142,7 +137,7 @@ export function PlayerProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── High-frequency time sync with YouTube Player instance ──────────
+  // ── Track progress polling (1000ms interval loop) ───────────────────
   useEffect(() => {
     let timer = null;
     if (isPlaying) {
@@ -158,7 +153,7 @@ export function PlayerProvider({ children }) {
             setDuration(d);
           }
         }
-      }, 200);
+      }, 1000);
     }
     return () => {
       if (timer) clearInterval(timer);
@@ -239,10 +234,10 @@ export function PlayerProvider({ children }) {
     if (resolvedVideoId) {
       cleanSong.videoId = resolvedVideoId;
       if (typeof p.loadVideoById === 'function') {
-        p.loadVideoById({ videoId: resolvedVideoId, startSeconds: 0 });
+        p.loadVideoById(resolvedVideoId);
       }
     } else {
-      // Direct YouTube search playlist loading
+      // Direct YouTube search playlist loading fallback
       const searchQuery = `${cleanSong.title} ${cleanSong.artist || ''}`.trim();
       if (typeof p.loadPlaylist === 'function') {
         p.loadPlaylist({ listType: 'search', list: searchQuery, index: 0, startSeconds: 0 });
@@ -345,12 +340,18 @@ export function PlayerProvider({ children }) {
       {children}
       {/* ── Native YouTube IFrame Audio Engine (Zero CORS / Full Length) ── */}
       <div
-        id="pulse-yt-wrapper"
-        className="fixed -bottom-[9999px] -right-[9999px] w-[200px] h-[200px] pointer-events-none opacity-0 select-none z-[-1]"
+        id="youtube-player-container"
+        style={{
+          position: 'absolute',
+          opacity: 0,
+          pointerEvents: 'none',
+          width: '1px',
+          height: '1px',
+          left: '-9999px',
+          top: '-9999px',
+        }}
         aria-hidden="true"
-      >
-        <div id="pulse-yt-player" />
-      </div>
+      />
     </PlayerContext.Provider>
   );
 }

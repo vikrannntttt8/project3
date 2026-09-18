@@ -17,11 +17,11 @@ export default defineConfig({
         secure: false,
         rewrite: (path) => path.replace(/^\/api\/jiosaavn/, ''),
       },
-      '/api/piped': {
-        target: 'https://pipedapi.kavin.rocks',
+      '/api/yt': {
+        target: 'https://www.youtube.com',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api\/piped/, ''),
+        rewrite: (path) => path.replace(/^\/api\/yt/, ''),
       },
     },
   },
