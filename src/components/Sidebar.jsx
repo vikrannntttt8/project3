@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { usePlayer } from '../context/PlayerContext.jsx';
+import SettingsModal from './shared/SettingsModal.jsx';
 
 const NAV_ITEMS = [
   { icon: 'home',          label: 'Home',     view: 'home'    },
@@ -7,7 +9,8 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar() {
-  const { view, setView, playlists, liked, currentSong, playCollection, loadSong, customAlbums = [] } = usePlayer();
+  const { view, setView, playlists, liked, playCollection, customAlbums = [] } = usePlayer();
+  const [showSettings, setShowSettings] = useState(false);
 
   return (
     <aside className="h-full w-60 glass-panel flex flex-col justify-between py-4 px-3 border-r border-white/5 select-none overflow-hidden">
@@ -114,20 +117,21 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Now playing mini */}
-      {currentSong && (
-        <div className="flex-shrink-0 p-2 bg-white/5 rounded-xl flex items-center gap-2 mt-2">
-          <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 bg-white/10">
-            {currentSong.thumbnail && (
-              <img src={currentSong.thumbnail} className="w-full h-full object-cover" alt="" />
-            )}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-label-sm font-semibold text-white truncate">{currentSong.title}</span>
-            <span className="text-label-sm text-on-surface-variant truncate">{currentSong.artist}</span>
-          </div>
-        </div>
-      )}
+      {/* TASK 1: Settings button anchored to bottom left */}
+      <div className="flex-shrink-0 pt-2 border-t border-white/5 mt-auto">
+        <button
+          onClick={() => setShowSettings(true)}
+          className="sidebar-settings-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-on-surface-variant hover:text-white hover:bg-white/5 transition-all duration-200 w-full text-left group min-h-[44px]"
+          title="Settings"
+        >
+          <span className="material-symbols-outlined text-[20px] text-outline group-hover:text-white group-hover:rotate-45 transition-transform duration-300">
+            settings
+          </span>
+          <span className="text-body-md font-medium">Settings</span>
+        </button>
+      </div>
+
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </aside>
   );
 }

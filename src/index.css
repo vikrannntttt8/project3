@@ -213,4 +213,48 @@ input[type='range'].volume-slider::-webkit-slider-thumb {
   }
 }
 
+/* TASK 3: Mobile UI Adjustments (@media max-width: 640px) */
+@media (max-width: 640px) {
+  .player-dock-wrap {
+    left: 0.35rem !important;
+    right: 0.35rem !important;
+    bottom: 0.35rem !important;
+  }
+
+  /* Compact dock height between 60px and 70px */
+  .player-dock-inner,
+  .glass-dock {
+    height: 64px !important;
+    min-height: 60px !important;
+    max-height: 70px !important;
+    padding: 0.3rem 0.6rem !important;
+    border-radius: 0.875rem !important;
+    gap: 0.4rem !important;
+  }
+
+  .player-dock-thumb {
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+    border-radius: 0.5rem !important;
+  }
+
+  .player-dock-title {
+    font-size: 12px !important;
+    line-height: 1.15 !important;
+  }
+
+  .player-dock-artist {
+    font-size: 10px !important;
+  }
+
+  /* Touch-accessible, properly padded Settings button */
+  .sidebar-settings-btn {
+    min-height: 48px !important;
+    padding: 0.75rem 1rem !important;
+    touch-action: manipulation;
+    font-size: 15px !important;
+  }
+}
+
+
 

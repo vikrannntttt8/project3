@@ -1,5 +1,6 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react';
 import { fetchSongLyrics, getSongById } from '../utils/saavn.js';
+import { getPipedAudioStream } from '../utils/pipedAudio.js';
 import { DEMO_LRC } from '../utils/lrcParser.js';
 import { useLibrary } from '../hooks/useLibrary.js';
 
@@ -132,28 +133,45 @@ export function PlayerProvider({ children }) {
     setDuration(0);
     setIsLoading(true);
 
-    // TASK 1: Full-length audio extraction (320kbps)
-    // Extract highest quality direct stream from song.downloadUrl array (quality: "320kbps" or last url)
-    // Do NOT use media_preview_url (prevents 30-second playback limit)
+    // TASK 2: PIPED YOUTUBE STREAM INTEGRATION
+    // 1. Replace Saavn stream extractor in playback handler to bypass 30-second preview limit
+    // 2. Search query: https://pipedapi.kavin.rocks/search?q={songName}&filter=music_songs
+    // 3. Details: https://pipedapi.kavin.rocks/streams/{videoId}
+    // 4. Extract highest bitrate item (stream.mimeType === "audio/webm" or "audio/mp4")
+    // 5. Set direct URL as <audio src={streamUrl}> source
     let directStream = '';
-    if (Array.isArray(song.downloadUrl) && song.downloadUrl.length) {
-      const high320 = song.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
-      directStream = high320?.url || high320?.link || song.downloadUrl[song.downloadUrl.length - 1]?.url || song.downloadUrl[song.downloadUrl.length - 1]?.link || '';
-    } else if (song.streamUrl && !song.streamUrl.includes('_p.')) {
-      directStream = song.streamUrl;
+
+    try {
+      const piped = await getPipedAudioStream(song.title, song.artist);
+      if (piped?.streamUrl) {
+        directStream = piped.streamUrl;
+      }
+    } catch (err) {
+      console.warn('[Piped] Stream extraction fallback:', err);
     }
 
-    if (!directStream && song.id) {
-      try {
-        const fullDetail = await getSongById(song.id);
-        if (fullDetail?.downloadUrl?.length) {
-          const high320 = fullDetail.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
-          directStream = high320?.url || fullDetail.downloadUrl[fullDetail.downloadUrl.length - 1]?.url || fullDetail.streamUrl;
-        } else {
-          directStream = fullDetail?.streamUrl || '';
+    // Resilient Fallback: If Piped public endpoint experiences network latency/outages,
+    // seamlessly fall back to the direct 320kbps full stream so audio never fails.
+    if (!directStream) {
+      if (Array.isArray(song.downloadUrl) && song.downloadUrl.length) {
+        const high320 = song.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
+        directStream = high320?.url || high320?.link || song.downloadUrl[song.downloadUrl.length - 1]?.url || song.downloadUrl[song.downloadUrl.length - 1]?.link || '';
+      } else if (song.streamUrl && !song.streamUrl.includes('_p.')) {
+        directStream = song.streamUrl;
+      }
+
+      if (!directStream && song.id) {
+        try {
+          const fullDetail = await getSongById(song.id);
+          if (fullDetail?.downloadUrl?.length) {
+            const high320 = fullDetail.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
+            directStream = high320?.url || fullDetail.downloadUrl[fullDetail.downloadUrl.length - 1]?.url || fullDetail.streamUrl;
+          } else {
+            directStream = fullDetail?.streamUrl || '';
+          }
+        } catch (err) {
+          console.warn('Could not fetch song details for 320kbps link:', err);
         }
-      } catch (err) {
-        console.warn('Could not fetch song details for 320kbps link:', err);
       }
     }
 

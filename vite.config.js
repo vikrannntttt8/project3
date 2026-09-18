@@ -17,6 +17,12 @@ export default defineConfig({
         secure: false,
         rewrite: (path) => path.replace(/^\/api\/jiosaavn/, ''),
       },
+      '/api/piped': {
+        target: 'https://pipedapi.kavin.rocks',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api\/piped/, ''),
+      },
     },
   },
 })

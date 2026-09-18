@@ -25,12 +25,12 @@ export default function PlayerDock() {
 
   return (
     <>
-      <div className="fixed z-50 pointer-events-auto transition-all duration-500 left-3 right-3 bottom-3 md:left-[15.5rem] md:right-4 md:bottom-4">
-        <div className="glass-dock rounded-2xl px-3 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4 max-w-5xl mx-auto shadow-2xl border border-white/10">
+      <div className="player-dock-wrap fixed z-50 pointer-events-auto transition-all duration-500 left-3 right-3 bottom-3 md:left-[15.5rem] md:right-4 md:bottom-4">
+        <div className="glass-dock player-dock-inner rounded-2xl px-3 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-4 max-w-5xl mx-auto shadow-2xl border border-white/10">
 
           {/* ── Left: Track info + Actions ────────────────────── */}
-          <div className="flex items-center gap-2.5 sm:gap-3 w-[160px] sm:w-[220px] min-w-0 flex-shrink-0">
-            <div className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden flex-shrink-0 ${isPlaying ? 'ring-1 ring-brand-violet' : ''}`}>
+          <div className="flex items-center gap-2 sm:gap-3 w-[150px] sm:w-[220px] min-w-0 flex-shrink-0">
+            <div className={`player-dock-thumb relative w-9 h-9 sm:w-11 sm:h-11 rounded-lg overflow-hidden flex-shrink-0 ${isPlaying ? 'ring-1 ring-brand-violet' : ''}`}>
               {currentSong?.thumbnail ? (
                 <img src={currentSong.thumbnail} alt={currentSong.title}
                   className="w-full h-full object-cover" />
@@ -47,10 +47,10 @@ export default function PlayerDock() {
             </div>
 
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-label-md font-semibold text-white truncate text-[13px] sm:text-[14px]">
+              <span className="player-dock-title text-label-md font-semibold text-white truncate text-[13px] sm:text-[14px]">
                 {currentSong?.title || 'Nothing playing'}
               </span>
-              <span className="text-body-sm text-on-surface-variant truncate text-[11px] sm:text-[12px]">
+              <span className="player-dock-artist text-body-sm text-on-surface-variant truncate text-[11px] sm:text-[12px]">
                 {currentSong?.artist || 'Search for a song'}
               </span>
             </div>
