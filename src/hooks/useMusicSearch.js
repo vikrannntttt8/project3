@@ -43,6 +43,28 @@ export function useMusicSearch() {
     setLoading(true);
     setError(null);
     try {
+      // Primary: Innertube backend search gateway
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`);
+      if (res.ok) {
+        const songs = await res.json();
+        if (Array.isArray(songs) && songs.length > 0) {
+          if (tab === 'songs') {
+            setResults(songs);
+            return;
+          }
+          if (tab === 'all') {
+            setResults({
+              songs: songs,
+              albums: [],
+              artists: [],
+              playlists: [],
+            });
+            return;
+          }
+        }
+      }
+
+      // Fallback: standard SEARCH_FNS
       const fn = SEARCH_FNS[tab] || searchAll;
       const data = await fn(q);
       setResults(data);
