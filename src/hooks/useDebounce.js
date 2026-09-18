@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react';
  * useDebounce — Reusable hook for debouncing fast input updates.
  *
  * @param {*} value - The input value to debounce.
- * @param {number} [delay=350] - Debounce delay in milliseconds (default 350ms).
+ * @param {number} [delay=200] - Debounce delay in milliseconds (default 200ms).
  * @returns {*} The debounced value after the specified delay.
  */
-export function useDebounce(value, delay = 350) {
+export function useDebounce(value, delay = 200) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {

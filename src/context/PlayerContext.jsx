@@ -31,8 +31,38 @@ export function PlayerProvider({ children }) {
   const [lyricsSource, setLyricsSource] = useState('demo');
   const [lyricsLoading, setLyricsLoading] = useState(false);
 
-  // ── View state ────────────────────────────────────────────────────
-  const [view, setView] = useState('home'); // 'home' | 'lyrics' | 'library' | 'liked'
+  // ── View & Navigation state ───────────────────────────────────────
+  // State: { view: 'home' | 'search' | 'artist' | 'album' | 'lyrics' | 'library' | 'liked', currentId: string | null, extra: any }
+  const [navState, setNavState] = useState({ view: 'home', currentId: null, extra: null });
+  const [navHistory, setNavHistory] = useState([]);
+
+  const view = navState.view;
+  const setView = useCallback((newView) => {
+    setNavState((prev) => {
+      setNavHistory((h) => [...h, prev]);
+      return { view: newView, currentId: null, extra: null };
+    });
+  }, []);
+
+  const navigateTo = useCallback((newView, currentId = null, extra = null) => {
+    setNavState((prev) => {
+      setNavHistory((h) => [...h, prev]);
+      return { view: newView, currentId, extra };
+    });
+  }, []);
+
+  const goBack = useCallback(() => {
+    setNavHistory((h) => {
+      if (h.length === 0) {
+        setNavState({ view: 'home', currentId: null, extra: null });
+        return [];
+      }
+      const nextH = [...h];
+      const prev = nextH.pop();
+      setNavState(prev || { view: 'home', currentId: null, extra: null });
+      return nextH;
+    });
+  }, []);
 
   // ── Library (liked + playlists + custom albums) ───────────────────
   const library = useLibrary();
@@ -318,12 +348,22 @@ export function PlayerProvider({ children }) {
   }, [queue, queueIndex, loadSong]);
 
   const playCollection = useCallback((songs, startIndex = 0) => {
-    if (!songs.length) return;
+    if (!songs || !songs.length) return;
     loadSong(songs[startIndex], songs, startIndex);
   }, [loadSong]);
 
+  const playAlbum = useCallback((tracks, startIndex = 0) => {
+    if (!tracks || !tracks.length) return;
+    loadSong(tracks[startIndex], tracks, startIndex);
+  }, [loadSong]);
+
   const toggleView = useCallback(() => {
-    setView(v => v === 'lyrics' ? 'home' : 'lyrics');
+    setNavState((prev) => {
+      if (prev.view === 'lyrics') {
+        return { view: 'home', currentId: null, extra: null };
+      }
+      return { view: 'lyrics', currentId: null, extra: null };
+    });
   }, []);
 
   const value = {
@@ -332,6 +372,7 @@ export function PlayerProvider({ children }) {
     currentSong, queue, queueIndex,
     lrcString, lyricsSource, lyricsLoading,
     view, setView,
+    navState, setNavState, navigateTo, goBack, playAlbum,
     // Actions
     play, pause, togglePlay, seek, changeVolume, toggleMute,
     loadSong, playNext, playPrev, playCollection, toggleView,

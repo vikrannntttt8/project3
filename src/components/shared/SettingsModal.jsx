@@ -153,6 +153,38 @@ export default function SettingsModal({ isOpen, onClose }) {
             </button>
           </div>
 
+          {/* Innertube & YouTube Music Sync Hook */}
+          <div className="flex flex-col gap-2.5 p-3.5 rounded-xl bg-white/5 border border-white/10">
+            <div className="flex items-center justify-between">
+              <label className="text-label-md uppercase tracking-wider text-outline font-semibold">
+                Innertube & Account Sync
+              </label>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Active
+              </span>
+            </div>
+            <p className="text-body-sm text-on-surface-variant">
+              Connect your YouTube Music visitor token or OAuth cookie for seamless personal playlist sync and recommendation engine parity.
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                type="password"
+                value={localStorage.getItem('pulse_yt_token') || ''}
+                onChange={(e) => localStorage.setItem('pulse_yt_token', e.target.value)}
+                placeholder="Paste Visitor Token / SAPISID Cookie..."
+                className="flex-1 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-white placeholder-outline text-label-sm focus:outline-none focus:border-brand-violet/60"
+              />
+              <button
+                type="button"
+                onClick={() => alert('Visitor token saved. Personal playlist syncing will be enabled for this session.')}
+                className="px-3 py-1.5 rounded-lg bg-brand-violet/30 hover:bg-brand-violet/50 text-white text-label-sm font-semibold border border-brand-violet/40 transition-colors"
+              >
+                Sync
+              </button>
+            </div>
+          </div>
+
           {/* Library & Cache Info */}
           <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex flex-col gap-2">
             <span className="text-label-md uppercase tracking-wider text-outline font-semibold">Storage & Persistence</span>

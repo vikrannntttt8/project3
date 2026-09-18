@@ -34,66 +34,191 @@ export async function getInnertube() {
 }
 
 /**
- * 1. searchMusic(query: string)
- * Queries specifically via YouTube Music (music.search) filtering by song.
- * Maps results into a clean, unified schema.
+ * Helper to parse a song item into a clean unified schema.
  */
-export async function searchMusic(query) {
+function parseSongItem(item) {
+  const id = item.id || '';
+  const title = item.title || 'Unknown Title';
+  
+  const firstArtist = Array.isArray(item.artists) && item.artists.length > 0 ? item.artists[0] : null;
+  const artist = item.artists?.map((a) => a.name).filter(Boolean).join(', ') || item.author?.name || 'Unknown Artist';
+  const artistId = firstArtist?.channel_id || firstArtist?.id || undefined;
+
+  const album = item.album?.name || (typeof item.album === 'string' ? item.album : undefined);
+
+  let duration = 0;
+  if (typeof item.duration?.seconds === 'number') {
+    duration = item.duration.seconds;
+  } else if (item.duration?.text) {
+    const parts = item.duration.text.split(':').map(Number);
+    if (parts.length === 2) duration = parts[0] * 60 + parts[1];
+    else if (parts.length === 3) duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+
+  const thumbnail = item.thumbnails?.slice(-1)[0]?.url
+    || (id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '');
+
+  // Check if official release (official artist channel, topic, or verified badge)
+  const isOfficial = Boolean(
+    item.badges?.some?.((b) => b.label?.toLowerCase().includes('official') || b.style?.includes('OFFICIAL'))
+    || item.is_explicit === false
+    || (item.album?.name && item.artists?.length)
+  );
+
+  return {
+    id,
+    videoId: id,
+    title,
+    artist,
+    artistId,
+    album,
+    duration,
+    thumbnail,
+    cover: thumbnail,
+    isOfficial,
+    type: 'song',
+  };
+}
+
+/**
+ * 1. searchMusic(query: string, type: 'all' | 'songs' | 'albums' | 'artists')
+ * Queries specifically via YouTube Music.
+ * Supports official-track sorting in 'songs' tab, album shelf renderer parsing, and artist views.
+ */
+export async function searchMusic(query, type = 'all') {
   if (!query || !query.trim()) return [];
 
   const yt = await getInnertube();
-  const searchResults = await yt.music.search(query.trim(), { type: 'song' });
+  const q = query.trim();
 
-  // Handle both search.songs.contents and direct contents arrays
-  const contents = searchResults.songs?.contents || searchResults.contents || [];
+  // ── Tab: Songs ──────────────────────────────────────────────────────────
+  if (type === 'songs' || type === 'song') {
+    const searchResults = await yt.music.search(q, { type: 'song' });
+    const contents = searchResults.songs?.contents || searchResults.contents || [];
+    const songs = contents.map(parseSongItem).filter((t) => t.id && t.id.length >= 10);
 
-  return contents.map((item) => {
-    const id = item.id || '';
-    const title = item.title || 'Unknown Title';
-    
-    // Extract artist name and artist browseId
-    const firstArtist = Array.isArray(item.artists) && item.artists.length > 0 ? item.artists[0] : null;
-    const artist = item.artists?.map((a) => a.name).filter(Boolean).join(', ') || item.author?.name || 'Unknown Artist';
-    const artistId = firstArtist?.channel_id || firstArtist?.id || undefined;
+    const qLower = q.toLowerCase();
+    const wantsRemixOrSlowed = qLower.includes('slow') || qLower.includes('reverb') || qLower.includes('remix') || qLower.includes('cover');
 
-    // Extract album
-    const album = item.album?.name || (typeof item.album === 'string' ? item.album : undefined);
+    // Filter out fan edits, slow-reverb uploads if not explicitly searched
+    const filtered = wantsRemixOrSlowed
+      ? songs
+      : songs.filter((s) => {
+          const tLower = s.title.toLowerCase();
+          return !tLower.includes('slowed') &&
+                 !tLower.includes('reverb') &&
+                 !tLower.includes('fan made') &&
+                 !tLower.includes('remake') &&
+                 !tLower.includes('8d audio');
+        });
 
-    // Extract duration in seconds
-    let duration = 0;
-    if (typeof item.duration?.seconds === 'number') {
-      duration = item.duration.seconds;
-    } else if (item.duration?.text) {
-      const parts = item.duration.text.split(':').map(Number);
-      if (parts.length === 2) duration = parts[0] * 60 + parts[1];
-      else if (parts.length === 3) duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
-    }
+    // Bubble official releases to top
+    filtered.sort((a, b) => {
+      if (a.isOfficial && !b.isOfficial) return -1;
+      if (!a.isOfficial && b.isOfficial) return 1;
+      return 0;
+    });
 
-    // High quality thumbnail
-    const thumbnail = item.thumbnails?.slice(-1)[0]?.url
-      || (id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '');
+    return filtered;
+  }
 
-    // Check if official release (official artist channel, topic, or verified badge)
-    const isOfficial = Boolean(
-      item.badges?.some?.((b) => b.label?.toLowerCase().includes('official') || b.style?.includes('OFFICIAL'))
-      || item.is_explicit === false
-      || (item.album?.name && item.artists?.length)
-    );
+  // ── Tab: Albums ─────────────────────────────────────────────────────────
+  if (type === 'albums' || type === 'album') {
+    const searchResults = await yt.music.search(q, { type: 'album' });
+    const contents = searchResults.albums?.contents || searchResults.contents || [];
 
-    return {
-      id,
-      videoId: id,
-      title,
-      artist,
-      artistId,
-      album,
-      duration,
-      thumbnail,
-      cover: thumbnail,
-      isOfficial,
-      type: 'song',
-    };
-  }).filter((track) => track.id && track.id.length >= 10);
+    return contents.map((a) => {
+      const id = a.id || '';
+      const title = a.title || 'Unknown Album';
+      const firstArtist = Array.isArray(a.artists) && a.artists.length > 0 ? a.artists[0] : null;
+      const artist = a.artists?.map((x) => x.name).filter(Boolean).join(', ') || a.author?.name || 'Unknown Artist';
+      const artistId = firstArtist?.channel_id || firstArtist?.id || undefined;
+      const year = a.year || '';
+      const thumbnail = a.thumbnails?.slice(-1)[0]?.url || '';
+
+      return {
+        id,
+        browseId: id,
+        title,
+        artist,
+        artistId,
+        year,
+        thumbnail,
+        cover: thumbnail,
+        type: 'album',
+      };
+    }).filter((a) => a.id);
+  }
+
+  // ── Tab: Artists ────────────────────────────────────────────────────────
+  if (type === 'artists' || type === 'artist') {
+    const searchResults = await yt.music.search(q, { type: 'artist' });
+    const contents = searchResults.artists?.contents || searchResults.contents || [];
+
+    return contents.map((art) => {
+      const id = art.id || '';
+      const name = art.name || art.title || 'Unknown Artist';
+      const thumbnail = art.thumbnails?.slice(-1)[0]?.url || '';
+
+      return {
+        id,
+        browseId: id,
+        name,
+        title: name,
+        thumbnail,
+        cover: thumbnail,
+        type: 'artist',
+      };
+    }).filter((art) => art.id);
+  }
+
+  // ── Tab: All (Mix official songs, albums, and artists) ───────────────────
+  try {
+    const [songRes, albumRes, artistRes] = await Promise.allSettled([
+      yt.music.search(q, { type: 'song' }),
+      yt.music.search(q, { type: 'album' }),
+      yt.music.search(q, { type: 'artist' }),
+    ]);
+
+    const songs = (songRes.status === 'fulfilled' ? (songRes.value.songs?.contents || songRes.value.contents || []) : [])
+      .map(parseSongItem)
+      .filter((t) => t.id && t.id.length >= 10);
+
+    const albums = (albumRes.status === 'fulfilled' ? (albumRes.value.albums?.contents || albumRes.value.contents || []) : [])
+      .map((a) => ({
+        id: a.id || '',
+        browseId: a.id || '',
+        title: a.title || 'Unknown Album',
+        artist: a.artists?.map((x) => x.name).filter(Boolean).join(', ') || a.author?.name || 'Unknown Artist',
+        year: a.year || '',
+        thumbnail: a.thumbnails?.slice(-1)[0]?.url || '',
+        cover: a.thumbnails?.slice(-1)[0]?.url || '',
+        type: 'album',
+      }))
+      .filter((a) => a.id);
+
+    const artists = (artistRes.status === 'fulfilled' ? (artistRes.value.artists?.contents || artistRes.value.contents || []) : [])
+      .map((art) => ({
+        id: art.id || '',
+        browseId: art.id || '',
+        name: art.name || art.title || 'Unknown Artist',
+        title: art.name || art.title || 'Unknown Artist',
+        thumbnail: art.thumbnails?.slice(-1)[0]?.url || '',
+        cover: art.thumbnails?.slice(-1)[0]?.url || '',
+        type: 'artist',
+      }))
+      .filter((art) => art.id);
+
+    // Return combined result list with official releases prioritized
+    return [
+      ...songs.slice(0, 15),
+      ...albums.slice(0, 6),
+      ...artists.slice(0, 4),
+    ];
+  } catch (err) {
+    console.error('[Innertube] Search all error:', err);
+    return [];
+  }
 }
 
 /**
@@ -192,6 +317,7 @@ export async function getArtistDetails(browseId) {
       const thumb = a.thumbnails?.slice(-1)[0]?.url || '';
       albums.push({
         id: a.id || '',
+        browseId: a.id || '',
         title: a.title || 'Unknown Album',
         artist: name,
         artistId: browseId,
@@ -205,10 +331,78 @@ export async function getArtistDetails(browseId) {
 
   return {
     id: browseId,
+    browseId,
     name,
     description,
     thumbnail,
     topSongs,
     albums,
+  };
+}
+
+/**
+ * 4. getAlbumDetails(browseId: string)
+ * Fetches the full album release and tracklist using yt.music.getAlbum(browseId).
+ */
+export async function getAlbumDetails(browseId) {
+  if (!browseId) throw new Error('browseId is required');
+
+  const yt = await getInnertube();
+  const album = await yt.music.getAlbum(browseId);
+
+  const title = album.header?.title?.text || album.title || 'Unknown Album';
+  const artist = album.header?.strapline_text_one?.text || album.header?.author?.name || 'Unknown Artist';
+  const artistId = album.header?.strapline_text_one?.endpoint?.payload?.browseId || undefined;
+
+  let year = '';
+  const subtitleText = album.header?.subtitle?.text || '';
+  const yearMatch = subtitleText.match(/\b(19\d\d|20\d\d)\b/);
+  if (yearMatch) year = yearMatch[1];
+
+  const thumbnail = album.header?.thumbnail?.contents?.[0]?.url
+    || album.header?.strapline_thumbnail?.contents?.[0]?.url
+    || album.thumbnails?.slice(-1)[0]?.url
+    || '';
+
+  const description = album.header?.description?.text || '';
+
+  const tracks = (album.contents || []).map((s, index) => {
+    let dur = 0;
+    if (typeof s.duration?.seconds === 'number') {
+      dur = s.duration.seconds;
+    } else if (s.duration?.text) {
+      const parts = s.duration.text.split(':').map(Number);
+      if (parts.length === 2) dur = parts[0] * 60 + parts[1];
+      else if (parts.length === 3) dur = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+
+    return {
+      id: s.id || '',
+      videoId: s.id || '',
+      trackNumber: index + 1,
+      title: s.title || `Track ${index + 1}`,
+      artist: s.artists?.map((a) => a.name).filter(Boolean).join(', ') || artist,
+      artistId: artistId,
+      album: title,
+      duration: dur,
+      thumbnail: thumbnail,
+      cover: thumbnail,
+      isOfficial: true,
+      type: 'song',
+    };
+  }).filter((t) => t.id);
+
+  return {
+    id: browseId,
+    browseId,
+    title,
+    artist,
+    artistId,
+    year,
+    thumbnail,
+    cover: thumbnail,
+    description,
+    trackCount: tracks.length,
+    tracks,
   };
 }

@@ -22,7 +22,7 @@ const TAB_LABELS = {
 };
 
 export default function HomeView() {
-  const { loadSong, playCollection, currentSong, isPlaying, togglePlay } = usePlayer();
+  const { loadSong, playCollection, currentSong, isPlaying, togglePlay, navigateTo } = usePlayer();
   const { query, results, loading, error, activeTab, search, switchTab, clear } = useMusicSearch();
 
   const [addMenuSong, setAddMenuSong]   = useState(null); // song to add to playlist
@@ -38,21 +38,19 @@ export default function HomeView() {
     loadSong(song, queue, idx >= 0 ? idx : 0);
   }, [currentSong, togglePlay, loadSong, results, activeTab]);
 
-  const handleAlbumClick = useCallback(async (album) => {
-    setDetailLoading(true);
-    try {
-      const data = await getAlbumSongs(album.id);
-      if (data.songs.length) playCollection(data.songs, 0);
-    } catch (e) { console.error(e); }
-    finally { setDetailLoading(false); }
-  }, [playCollection]);
+  const handleAlbumClick = useCallback((album) => {
+    navigateTo('album', album.id || album.browseId, {
+      title: album.title || album.name,
+      artist: album.artist,
+      cover: album.image || album.thumbnail,
+    });
+  }, [navigateTo]);
 
   const handleArtistClick = useCallback((artist) => {
-    setSelectedArtist({
-      artistName: artist.title || artist.name,
-      artistId: artist.id || artist.browseId,
-    });
-  }, []);
+    const name = typeof artist === 'string' ? artist : (artist.title || artist.name);
+    const id = typeof artist === 'string' ? null : (artist.id || artist.browseId);
+    navigateTo('artist', id, { name });
+  }, [navigateTo]);
 
   const handlePlaylistClick = useCallback(async (playlist) => {
     setDetailLoading(true);
@@ -235,7 +233,7 @@ export default function HomeView() {
           : (
             <HomeDefault
               onPlaySong={handlePlaySong}
-              onArtistClick={(artistName, artistId) => setSelectedArtist({ artistName, artistId })}
+              onArtistClick={(artistName, artistId) => navigateTo('artist', artistId, { name: artistName })}
             />
           )
         }

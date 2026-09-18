@@ -5,9 +5,11 @@ import LyricsView  from './components/LyricsView/LyricsView.jsx';
 import LibraryView from './components/LibraryView/LibraryView.jsx';
 import PlayerDock  from './components/PlayerDock/PlayerDock.jsx';
 import Sidebar     from './components/Sidebar.jsx';
+import ArtistView  from './components/ArtistView/ArtistView.jsx';
+import AlbumView   from './components/AlbumView/AlbumView.jsx';
 
 function AppShell() {
-  const { view } = usePlayer();
+  const { view, navState } = usePlayer();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Close mobile drawer on view change
@@ -58,8 +60,10 @@ function AppShell() {
 
       {/* ── Main content with smooth transitions ─────────────── */}
       <div className="flex-1 relative z-10 overflow-hidden">
-        <div key={view} className="h-full w-full animate-page-slide">
-          {view === 'home'    && <HomeView />}
+        <div key={`${view}-${navState.currentId || ''}`} className="h-full w-full animate-page-slide">
+          {(view === 'home' || view === 'search') && <HomeView />}
+          {view === 'artist'  && <ArtistView browseId={navState.currentId} artistName={navState.extra?.name} />}
+          {view === 'album'   && <AlbumView browseId={navState.currentId} initialData={navState.extra} />}
           {view === 'lyrics'  && <LyricsView />}
           {view === 'library' && <LibraryView initialSection="playlists" />}
           {view === 'liked'   && <LibraryView initialSection="liked" />}

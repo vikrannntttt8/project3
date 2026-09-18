@@ -17,11 +17,13 @@ function innertubeApiPlugin() {
         const pathname = parsedUrl.pathname;
 
         // ── 1. GET /api/search?q=:query ───────────────────────────────────
+        // ── 1. GET /api/search?q=:query&type=:type ───────────────────────
         if (pathname === '/api/search' && req.method === 'GET') {
           try {
             const query = parsedUrl.searchParams.get('q') || parsedUrl.searchParams.get('query') || '';
+            const type = parsedUrl.searchParams.get('type') || 'all';
             const { searchMusic } = await import('./src/services/innertube.js');
-            const results = await searchMusic(query);
+            const results = await searchMusic(query, type);
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.statusCode = 200;
@@ -29,6 +31,26 @@ function innertubeApiPlugin() {
             return;
           } catch (err) {
             console.error('[API /api/search] Error:', err);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: err.message }));
+            return;
+          }
+        }
+
+        // ── 1b. GET /api/album/:id ────────────────────────────────────────
+        if (pathname.startsWith('/api/album/') && req.method === 'GET') {
+          const browseId = pathname.replace('/api/album/', '').split('?')[0];
+          try {
+            const { getAlbumDetails } = await import('./src/services/innertube.js');
+            const albumData = await getAlbumDetails(browseId);
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.statusCode = 200;
+            res.end(JSON.stringify(albumData));
+            return;
+          } catch (err) {
+            console.error('[API /api/album] Error:', err);
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ error: err.message }));
