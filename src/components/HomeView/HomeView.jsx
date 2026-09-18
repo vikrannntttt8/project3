@@ -7,6 +7,8 @@ import SongRow        from './SongRow.jsx';
 import AlbumCard      from './AlbumCard.jsx';
 import ArtistCard     from './ArtistCard.jsx';
 import AddToPlaylistMenu from '../shared/AddToPlaylistMenu.jsx';
+import Search         from '../Search.jsx';
+import ArtistModal    from '../ArtistView/ArtistModal.jsx';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -25,6 +27,7 @@ export default function HomeView() {
 
   const [addMenuSong, setAddMenuSong]   = useState(null); // song to add to playlist
   const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedArtist, setSelectedArtist] = useState(null); // { artistName, artistId }
 
   // ── Play handlers ─────────────────────────────────────────────────
 
@@ -44,14 +47,12 @@ export default function HomeView() {
     finally { setDetailLoading(false); }
   }, [playCollection]);
 
-  const handleArtistClick = useCallback(async (artist) => {
-    setDetailLoading(true);
-    try {
-      const data = await getArtistSongs(artist.id);
-      if (data.songs.length) playCollection(data.songs, 0);
-    } catch (e) { console.error(e); }
-    finally { setDetailLoading(false); }
-  }, [playCollection]);
+  const handleArtistClick = useCallback((artist) => {
+    setSelectedArtist({
+      artistName: artist.title || artist.name,
+      artistId: artist.id || artist.browseId,
+    });
+  }, []);
 
   const handlePlaylistClick = useCallback(async (playlist) => {
     setDetailLoading(true);
@@ -231,9 +232,27 @@ export default function HomeView() {
       <main className="flex-1 px-4 sm:px-6 md:px-8 py-5 sm:py-6 pb-36">
         {showSearch
           ? renderResults()
-          : <HomeDefault onPlaySong={handlePlaySong} />
+          : (
+            <HomeDefault
+              onPlaySong={handlePlaySong}
+              onArtistClick={(artistName, artistId) => setSelectedArtist({ artistName, artistId })}
+            />
+          )
         }
       </main>
+
+      {/* ── Dedicated Artist Discography Modal ──────────────── */}
+      {selectedArtist && (
+        <ArtistModal
+          artistId={selectedArtist.artistId}
+          artistName={selectedArtist.artistName}
+          onClose={() => setSelectedArtist(null)}
+          onSelectTrack={(track) => {
+            handlePlaySong(track);
+            setSelectedArtist(null);
+          }}
+        />
+      )}
 
       {/* ── Add to Playlist menu overlay ────────────────────── */}
       {addMenuSong && (
@@ -304,7 +323,7 @@ const FEATURED = [
   { id: 'f5', title: 'English Top Charts',   subtitle: 'Global Hits',      gradient: 'from-teal-900 to-cyan-900',     query: 'top english hits' },
 ];
 
-function HomeDefault({ onPlaySong }) {
+function HomeDefault({ onPlaySong, onArtistClick }) {
   const { loadSong } = usePlayer();
   const [loadingId, setLoadingId] = useState(null);
 
@@ -319,6 +338,14 @@ function HomeDefault({ onPlaySong }) {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* ── Fast Innertube Search Experience ── */}
+      <section className="w-full">
+        <Search
+          onSelectTrack={(track) => onPlaySong(track)}
+          onArtistClick={(artistName, artistId) => onArtistClick?.(artistName, artistId)}
+        />
+      </section>
+
       {/* Now playing album art */}
       <NowPlayingHero />
 

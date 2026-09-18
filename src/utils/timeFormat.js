@@ -10,6 +10,8 @@ export function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+export const formatDuration = formatTime;
+
 /**
  * Get remaining time as -MM:SS
  */
