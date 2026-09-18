@@ -1,62 +1,87 @@
 import { useState, useCallback, useRef } from 'react';
-import { searchSongs, getSongStream } from '../utils/innertube.js';
+import {
+  searchAll,
+  searchSongs,
+  searchAlbums,
+  searchArtists,
+  searchPlaylists,
+} from '../utils/saavn.js';
+
+export const SEARCH_TABS = ['all', 'songs', 'albums', 'artists', 'playlists'];
+
+const SEARCH_FNS = {
+  all:       searchAll,
+  songs:     searchSongs,
+  albums:    searchAlbums,
+  artists:   searchArtists,
+  playlists: searchPlaylists,
+};
 
 /**
- * useMusicSearch — Innertube-powered search hook
+ * useMusicSearch — Saavn.dev powered search hook
  *
- * Provides debounced search against YouTube Music via Piped API.
- * Returns results, loading state, and an action to load a full song
- * (stream URL + metadata) into the player.
+ * Manages debounced search across 5 tabs: All | Songs | Albums | Artists | Playlists.
+ * `results` shape depends on active tab:
+ *   - 'all'       → { songs[], albums[], artists[], playlists[] }
+ *   - 'songs'     → Song[]
+ *   - 'albums'    → Album[]
+ *   - 'artists'   → Artist[]
+ *   - 'playlists' → Playlist[]
  */
 export function useMusicSearch() {
-  const [results,  setResults]  = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
-  const [streamLoading, setStreamLoading] = useState(false);
+  const [results,      setResults]      = useState(null); // null = not searched yet
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
+  const [activeTab,    setActiveTab]    = useState('all');
+  const [query,        setQuery]        = useState('');
 
   const debounceRef = useRef(null);
 
-  /**
-   * Debounced search — triggers 350ms after last keystroke.
-   * @param {string} query
-   */
-  const search = useCallback((query) => {
-    clearTimeout(debounceRef.current);
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
+  /** Execute a search for the current query and given tab */
+  const executeSearch = useCallback(async (q, tab) => {
+    if (!q.trim()) { setResults(null); return; }
     setLoading(true);
     setError(null);
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const data = await searchSongs(query);
-        setResults(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }, 350);
-  }, []);
-
-  /**
-   * Resolve full stream URL + metadata for a videoId.
-   * @param {string} videoId
-   * @returns {Promise<SongDetail>}
-   */
-  const getStreamDetails = useCallback(async (videoId) => {
-    setStreamLoading(true);
     try {
-      const detail = await getSongStream(videoId);
-      return detail;
+      const fn = SEARCH_FNS[tab] || searchAll;
+      const data = await fn(q);
+      setResults(data);
     } catch (err) {
       setError(err.message);
-      throw err;
+      setResults(null);
     } finally {
-      setStreamLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  return { results, loading, error, streamLoading, search, getStreamDetails };
+  /** Debounced query update — triggers after 350ms idle */
+  const search = useCallback((q) => {
+    setQuery(q);
+    clearTimeout(debounceRef.current);
+    if (!q.trim()) { setResults(null); return; }
+    debounceRef.current = setTimeout(() => {
+      executeSearch(q, activeTab);
+    }, 350);
+  }, [activeTab, executeSearch]);
+
+  /** Switch tab and re-run search for current query */
+  const switchTab = useCallback((tab) => {
+    setActiveTab(tab);
+    if (query.trim()) {
+      executeSearch(query, tab);
+    }
+  }, [query, executeSearch]);
+
+  /** Clear everything */
+  const clear = useCallback(() => {
+    clearTimeout(debounceRef.current);
+    setQuery('');
+    setResults(null);
+    setError(null);
+  }, []);
+
+  return {
+    query, results, loading, error, activeTab,
+    search, switchTab, clear,
+  };
 }

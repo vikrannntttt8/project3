@@ -1,16 +1,17 @@
 # Pulse — Architecture & Concepts Guide
 
-> A comprehensive learning guide for the Pulse music web app.
-> This document explains every major design decision, algorithm, and integration.
+> Complete learning guide for the Pulse music web app.
+> Every major design decision, algorithm, and API integration explained.
 
 ---
 
 ## Table of Contents
 1. [App Architecture & Directory Layout](#1-app-architecture--directory-layout)
 2. [Stitch UI → Tailwind CSS Translation](#2-stitch-ui--tailwind-css-translation)
-3. [Audio Playback & State Flow](#3-audio-playback--state-flow)
+3. [Audio Playback & State Flow (useRef Audio Engine)](#3-audio-playback--state-flow)
 4. [LRC Timestamp Syncing Algorithm](#4-lrc-timestamp-syncing-algorithm)
-5. [API Integration Breakdown (Innertube Stack)](#5-api-integration-breakdown-innertube-stack)
+5. [Saavn.dev API Integration](#5-saavndev-api-integration)
+6. [Playlist & Library State Engine (localStorage)](#6-playlist--library-state-engine)
 
 ---
 
@@ -18,410 +19,360 @@
 
 ```
 PULSE MUSIC/
-├── index.html                    # HTML shell — dark class, Material Symbols CDN
-├── vite.config.js                # Vite + CORS proxy for Piped API / lrclib
-├── tailwind.config.js            # Nordic Nocturne design tokens from Stitch
-├── ARCHITECTURE_AND_CONCEPTS.md  # This file
+├── index.html
+├── vite.config.js                # No proxy needed — Saavn.dev is CORS-open
+├── tailwind.config.js            # Nordic Nocturne tokens from Stitch
+├── ARCHITECTURE_AND_CONCEPTS.md
 │
 └── src/
-    ├── main.jsx                  # React entry — mounts <App> into #root
-    ├── App.jsx                   # Root shell: sidebar + view switching + dock
-    ├── index.css                 # Global CSS: glass utilities, lyric glow, range inputs
+    ├── main.jsx
+    ├── App.jsx                   # View router: home | lyrics | library
+    ├── index.css                 # glass-dock, glass-card, lyric-active-glow
     │
     ├── context/
-    │   └── PlayerContext.jsx     # Global audio state: single source of truth
+    │   └── PlayerContext.jsx     # Single Audio() instance + all state
     │
     ├── hooks/
-    │   ├── useAudioPlayer.js     # (Logic embedded in PlayerContext)
-    │   ├── useLrcSync.js         # LRC parse + active line detection
-    │   └── useMusicSearch.js     # Debounced search + stream resolution
+    │   ├── useLrcSync.js         # LRC parse → active line index
+    │   ├── useMusicSearch.js     # Debounced 5-tab Saavn search
+    │   └── useLibrary.js         # localStorage CRUD for playlists + liked
     │
     ├── utils/
-    │   ├── lrcParser.js          # Pure functions: parseLrc(), getActiveLyricIndex()
-    │   ├── innertube.js          # API layer: searchSongs(), getSongStream(), fetchLyrics()
+    │   ├── saavn.js              # Saavn.dev API wrapper (all endpoints)
+    │   ├── lrcParser.js          # parseLrc(), getActiveLyricIndex()
     │   └── timeFormat.js         # formatTime(seconds) → "MM:SS"
     │
     └── components/
-        ├── Sidebar.jsx           # Left nav: Home, Search, Library, Playlists
+        ├── Sidebar.jsx
         ├── HomeView/
-        │   ├── HomeView.jsx      # Main home layout: greeting, art, recs, queue
-        │   ├── SearchBar.jsx     # Capsule input with focus glow
-        │   ├── QuickReplayRow.jsx # Horizontal recent tracks
-        │   └── RecommendationCard.jsx # Featured mix card
+        │   ├── HomeView.jsx      # Search tabs + result renderers + default home
+        │   ├── SearchBar.jsx
+        │   ├── SongRow.jsx       # Playable track row with like/add-to-playlist
+        │   ├── AlbumCard.jsx     # Album/Playlist card grid item
+        │   └── ArtistCard.jsx    # Circular artist avatar card
         ├── LyricsView/
-        │   ├── LyricsView.jsx    # 2-column fullscreen lyrics container
-        │   ├── AlbumArtPanel.jsx # Left col: art + controls + seek
-        │   └── LyricsPanel.jsx   # Right col: auto-scroll karaoke
-        └── PlayerDock/
-            ├── PlayerDock.jsx    # Fixed glass bottom dock
-            ├── SeekBar.jsx       # Gradient seek scrubber
-            └── VolumeSlider.jsx  # Volume with mute toggle
+        │   ├── LyricsView.jsx
+        │   ├── AlbumArtPanel.jsx
+        │   └── LyricsPanel.jsx   # Karaoke scroll + click-to-seek
+        ├── LibraryView/
+        │   └── LibraryView.jsx   # Playlist CRUD + liked tracks view
+        ├── PlayerDock/
+        │   ├── PlayerDock.jsx    # Persistent glass dock — fully wired
+        │   ├── SeekBar.jsx
+        │   └── VolumeSlider.jsx
+        └── shared/
+            └── AddToPlaylistMenu.jsx  # Modal: pick/create playlist for a song
 ```
-
-### Why This Structure?
-
-| Principle | How Applied |
-|---|---|
-| **Single Responsibility** | Each component does one thing: `LyricsPanel` only renders lyrics, `SeekBar` only handles scrubbing |
-| **Separation of Concerns** | API logic lives in `utils/`, React state in `context/`, UI in `components/` |
-| **Single Audio Element** | One `<audio>` ref in `PlayerContext` — prevents multiple simultaneous streams |
-| **Context over Prop Drilling** | Any component can call `usePlayer()` without chaining props through 5 levels |
 
 ---
 
 ## 2. Stitch UI → Tailwind CSS Translation
 
-The design system from Stitch ("Nordic Nocturne") was mapped to Tailwind config exactly:
+### Nordic Nocturne Color Tokens
 
-### Color Token Mapping
+| Stitch Design Token | Hex | CSS Utility |
+|---|---|---|
+| Background canvas | `#09090B` | `bg-[#09090B]` |
+| Primary (Electric Violet) | `#d0bcff` | `text-primary` |
+| Brand Violet (accent) | `#8B5CF6` | `text-brand-violet` |
+| Brand Pink | `#EC4899` | `text-brand-pink` |
+| Brand Cyan | `#06B6D4` | `text-brand-cyan` |
+| Surface low | `#1c1b1d` | `bg-surface-low` |
 
-| Stitch Token | Hex Value | Tailwind Class | Usage |
-|---|---|---|---|
-| `background` | `#131315` | `bg-background` | Page canvas |
-| Canvas base | `#09090B` | `bg-[#09090B]` | OLED black void |
-| `primary` | `#d0bcff` (Electric Violet) | `text-primary` | Active states, badges |
-| `secondary` | `#ffb0cd` (Neon Pink) | `text-secondary` | Lyrics glow, favorites |
-| `tertiary` | `#4cd7f6` (Electric Cyan) | `text-tertiary` | Spatial badges, live dots |
-| Brand Violet | `#8B5CF6` | `text-brand-violet` | Seek fill, focus glows |
-| Brand Pink | `#EC4899` | `text-brand-pink` | Heart buttons, lyric active |
-| Brand Cyan | `#06B6D4` | `text-brand-cyan` | Audio quality badges |
-
-### Glassmorphism — Stitch Elevation Levels
-
-The Stitch design system defines 4 elevation levels, all implemented as CSS utility classes:
+### Glassmorphism CSS Classes
 
 ```css
-/* Level 1: Cards */
-.glass-card {
-  background: rgba(18, 18, 21, 0.40);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* Level 2: Panels / Modals */
-.glass-panel {
-  background: rgba(24, 24, 28, 0.70);
-  backdrop-filter: blur(32px);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
-}
-
-/* Level 3: Floating Dock (highest) */
+/* Glass Dock — Stitch Level 3 Elevation */
 .glass-dock {
   background: rgba(18, 18, 21, 0.65);
   backdrop-filter: blur(40px) saturate(1.8);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.6),       /* depth shadow */
+    0 12px 32px rgba(0, 0, 0, 0.6),
     0 0 48px -12px rgba(139, 92, 246, 0.2); /* violet subsurface glow */
 }
 ```
 
-**Key insight:** Glassmorphism in this design does NOT use `box-shadow: drop-shadow`. Instead it uses:
-- `backdrop-filter: blur()` — frosted glass effect on content behind it
-- `saturate(1.8)` — intensifies colors seen through the glass
-- `rgba()` borders — hairline "rim light" to define the glass edge
-
 ### Active Lyric Glow
-
 ```css
 .lyric-active-glow {
   text-shadow:
-    0 0 35px rgba(236, 72, 153, 0.45),  /* neon pink outer glow */
-    0 0 15px rgba(255, 255, 255, 0.25); /* inner white shimmer */
+    0 0 35px rgba(236, 72, 153, 0.45), /* neon pink bloom */
+    0 0 15px rgba(255, 255, 255, 0.25); /* inner shimmer */
 }
 ```
-
-This creates the "singing line" effect matching Stitch's spec: `text-shadow: 0 0 35px rgba(192,38,211,0.4)`.
-
-### Seek Bar Gradient
-
-```css
-.seek-fill {
-  background: linear-gradient(90deg, #8B5CF6, #EC4899);
-}
-```
-
-From Stitch Component spec: *"track fill illuminated with linear gradient (#8B5CF6 to #EC4899)"*.
 
 ---
 
 ## 3. Audio Playback & State Flow
 
-The core audio engine is a single native `<audio>` element managed by `PlayerContext`.
-
-### The State Machine
-
-```
-┌─────────────────────────────────────────────┐
-│               PlayerContext                 │
-│                                             │
-│  audioRef ──► <audio> element (hidden)      │
-│                                             │
-│  State:                                     │
-│   isPlaying   ◄── 'play' / 'pause' events  │
-│   currentTime ◄── 'timeupdate' event        │
-│   duration    ◄── 'durationchange' event    │
-│   volume      ◄── changeVolume() action     │
-│   currentSong ◄── loadSong() action         │
-│   lrcString   ◄── fetchLyrics() async       │
-│   view        ◄── toggleView() action       │
-└─────────────────────────────────────────────┘
-```
-
-### How Events Wire Up
+### Why `useRef(new Audio())` instead of `<audio>` element?
 
 ```javascript
-// In PlayerContext useEffect:
-const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-// ↑ Called ~4x per second by the browser automatically
-// This drives the seek bar position AND the active lyric line
-
-audio.addEventListener('timeupdate', onTimeUpdate);
-// Cleanup is critical to prevent memory leaks:
-return () => audio.removeEventListener('timeupdate', onTimeUpdate);
+// PlayerContext.jsx
+const audioRef = useRef(null);
+if (!audioRef.current) {
+  audioRef.current = new Audio();
+}
 ```
 
-### loadSong() Flow
+**Key reasons:**
+1. `useRef` holds a mutable value that **never triggers re-renders** when changed
+2. `new Audio()` creates a persistent browser audio engine — one instance for the app's lifetime
+3. Unlike `<audio>` in JSX, it doesn't get recreated on state changes, preventing playback interruptions
+4. Event listeners attached once on mount stay active forever without re-registration
 
-```
-User clicks a search result
-        │
-        ▼
-useMusicSearch.getStreamDetails(videoId)
-        │ calls Piped API → /streams/{videoId}
-        │ returns { streamUrl, title, artist, thumbnail, duration }
-        ▼
-PlayerContext.loadSong(song)
-        │
-        ├─ audio.pause()           // stop current
-        ├─ audio.src = streamUrl   // set new source
-        ├─ audio.load()            // reset decoder
-        ├─ audio.play()            // start playback
-        │
-        └─ fetchLyrics(title, artist) // async, non-blocking
-                │
-                ├─ lrclib.net API search
-                ├─ returns syncedLyrics (LRC format)
-                └─ setLrcString(lrc) → triggers useLrcSync re-parse
-```
-
-### seek() Implementation
+### Event Wiring Pattern
 
 ```javascript
-const seek = useCallback((time) => {
+useEffect(() => {
   const audio = audioRef.current;
-  // Clamp to valid range — prevents NaN or out-of-bounds
-  audio.currentTime = Math.max(0, Math.min(time, audio.duration || 0));
-  // The 'timeupdate' event fires automatically after this assignment,
-  // updating currentTime state and re-running the active lyric check.
-}, []);
+  const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+  // ↑ Fires ~4x/sec → drives seekbar + active lyric line
+
+  audio.addEventListener('timeupdate', onTimeUpdate);
+  // Cleanup prevents memory leaks if component unmounts:
+  return () => audio.removeEventListener('timeupdate', onTimeUpdate);
+}, []); // Empty deps = runs once on mount only
+```
+
+### loadSong() — Complete Flow
+
+```
+User clicks SongRow/AlbumCard/ArtistCard
+     │
+     ▼
+loadSong(song, queue, index)
+     │
+     ├─ audio.pause()            // stop current
+     ├─ audio.src = streamUrl    // set new Saavn 320kbps MP3 URL
+     ├─ audio.load()             // reset decoder buffer
+     ├─ audio.play()             // begin playback
+     │      │ (browser fetches audio stream from Saavn CDN)
+     │      ▼
+     │  'play' event fires → setIsPlaying(true)
+     │  'durationchange' fires → setDuration(n)
+     │  'timeupdate' fires ~4x/sec → setCurrentTime(n)
+     │
+     └─ fetchSongLyrics(id, title, artist)  [async, non-blocking]
+            │
+            ├─ Try saavn.dev /songs/{id}/lyrics
+            ├─ Try lrclib.net synced LRC
+            └─ Fallback: DEMO_LRC
+            │
+            ▼
+       setLrcString(lrc) → useLrcSync re-parses → LyricsPanel updates
+```
+
+### Queue Navigation
+
+```javascript
+const playNext = () => {
+  const nextIndex = (queueIndex + 1) % queue.length; // wraps around
+  loadSong(queue[nextIndex], null, nextIndex);
+};
+
+const playPrev = () => {
+  const audio = audioRef.current;
+  if (audio.currentTime > 3) {
+    audio.currentTime = 0; // restart current if > 3s played
+    return;
+  }
+  const prevIndex = (queueIndex - 1 + queue.length) % queue.length;
+  loadSong(queue[prevIndex], null, prevIndex);
+};
 ```
 
 ---
 
 ## 4. LRC Timestamp Syncing Algorithm
 
-LRC (Lyric) format stores synchronized lyrics as:
-```
-[00:16.00] Drowning in the neon waves of timeless reverie
-[01:00.00] Rise above the static and the noise
-```
-
-### Step 1: Parse with Regex
+### Regex Parser
 
 ```javascript
-// lrcParser.js
+// [01:23.45] lyric text
 const LRC_LINE_REGEX = /\[(\d{1,3}):(\d{2}(?:\.\d+)?)\](.*)/;
 
-// Breakdown:
-// \[          — literal opening bracket
-// (\d{1,3})   — capture group 1: MINUTES (1-3 digits, e.g. "01" or "1")
-// :           — literal colon separator
-// (\d{2}      — capture group 2: SECONDS (always 2 digits)
-//   (?:\.\d+)?) — optional decimal milliseconds, e.g. ".45"
-// \]          — literal closing bracket
-// (.*)        — capture group 3: lyric text (rest of line)
+// \[         — literal [
+// (\d{1,3})  — MINUTES capture (1-3 digits)
+// :          — colon separator
+// (\d{2}     — SECONDS (always 2 digits)
+//  (?:\.\d+)?) — optional .milliseconds
+// \]         — literal ]
+// (.*)       — lyric text (rest of line)
 
-export function parseLrc(lrcString) {
-  return lrcString.split('\n')
-    .map(line => LRC_LINE_REGEX.exec(line.trim()))
-    .filter(Boolean)
-    .map(match => ({
-      time: parseInt(match[1]) * 60 + parseFloat(match[2]),
-      // ^ e.g. [01:23.45] → 1 * 60 + 23.45 = 83.45 seconds
-      text: match[3].trim() || '♪',
-    }))
-    .sort((a, b) => a.time - b.time); // ensure chronological order
-}
+const match = LRC_LINE_REGEX.exec('[01:23.45] Hello World');
+// match[1] = "01" → 1 minute
+// match[2] = "23.45" → 23.45 seconds
+// match[3] = " Hello World"
+
+const time = parseInt(match[1]) * 60 + parseFloat(match[2]);
+// = 1 * 60 + 23.45 = 83.45 seconds
 ```
 
-### Step 2: Find Active Line
+### Active Line Detection
 
 ```javascript
 export function getActiveLyricIndex(lines, currentTime) {
-  // Strategy: linear scan from start
-  // The "active" line is the LAST line whose timestamp <= currentTime
-  // This handles the case where lyrics overlap time windows
-
-  let activeIndex = -1; // -1 = before any lyrics start
-
+  // Lines are sorted by timestamp.
+  // Active = last line whose time <= currentTime.
+  let activeIndex = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].time <= currentTime) {
-      activeIndex = i; // keep updating — last match wins
-    } else {
-      break; // array is sorted, so no need to look further
-    }
+    if (lines[i].time <= currentTime) activeIndex = i;
+    else break; // sorted — stop early
   }
   return activeIndex;
 }
+// O(n) — fast enough for 200-line LRC files (<0.1ms per call)
 ```
 
-**Time complexity:** O(n) scan — with typical LRC files (50-200 lines), this runs in < 0.1ms per frame.
+### Click-to-Seek
 
-### Step 3: useLrcSync Hook Wires It Together
+```jsx
+<p onClick={() => seek(line.time)}>{line.text}</p>
+// seek(83.45) → audio.currentTime = 83.45
+// → 'timeupdate' fires → currentTime state updates
+// → getActiveLyricIndex runs → activeIndex updates → lyric highlights
+```
+
+---
+
+## 5. Saavn.dev API Integration
+
+**Base URL:** `https://saavn.dev/api`  
+**Auth:** None required  
+**CORS:** Open — works directly from browser  
+**Stream format:** 320kbps MP3 (last item in `downloadUrl` array)
+
+### Endpoint Reference
+
+| Endpoint | Purpose | Key Response Fields |
+|---|---|---|
+| `GET /search/all?query=` | Multi-category results | `data.{songs,albums,artists,playlists}.results[]` |
+| `GET /search/songs?query=` | Songs only | `data.results[].{name, artists, image, downloadUrl, duration}` |
+| `GET /search/albums?query=` | Albums | `data.results[].{name, artists, image, songCount}` |
+| `GET /search/artists?query=` | Artists | `data.results[].{name, image, followerCount}` |
+| `GET /search/playlists?query=` | Playlists | `data.results[].{name, image, songCount}` |
+| `GET /albums?id=` | Album tracklist | `data.songs[]` |
+| `GET /artists/{id}/songs` | Artist top songs | `data.songs.results[]` |
+| `GET /playlists?id=` | Playlist tracks | `data.songs[]` |
+| `GET /songs/{id}/lyrics` | Song lyrics (plain) | `data.lyrics` |
+
+### Image & Stream Extraction
 
 ```javascript
-// useLrcSync.js
-export function useLrcSync(lrcString, currentTime) {
-  // parseLrc is memoized — only re-runs when lrcString changes (new song)
-  const lines = useMemo(() => parseLrc(lrcString), [lrcString]);
+// Image: last item in array = highest resolution (500×500)
+function bestImage(arr) {
+  return arr[arr.length - 1]?.url || '';
+}
 
-  // getActiveLyricIndex runs on every currentTime change (~4x/sec)
-  const activeIndex = useMemo(
-    () => getActiveLyricIndex(lines, currentTime),
-    [lines, currentTime]
-  );
+// Stream: last item = 320kbps MP3
+function bestStream(arr) {
+  return arr[arr.length - 1]?.url || '';
+}
 
-  return { lines, activeIndex };
+// Usage:
+const song = {
+  thumbnail: bestImage(rawSong.image),      // 500x500 JPG
+  streamUrl: bestStream(rawSong.downloadUrl) // 320kbps MP3
+};
+
+// Plug into Audio:
+audio.src = song.streamUrl;
+audio.play();
+```
+
+### Search Tab Architecture
+
+```
+User types in SearchBar
+        │ (350ms debounce via useMusicSearch)
+        ▼
+Tab: "all"       → searchAll()      → { songs[], albums[], artists[], playlists[] }
+Tab: "songs"     → searchSongs()    → Song[]
+Tab: "albums"    → searchAlbums()   → Album[]
+Tab: "artists"   → searchArtists()  → Artist[]
+Tab: "playlists" → searchPlaylists() → Playlist[]
+
+Clicking tab → switchTab(tab) → re-runs search for current query with new endpoint
+```
+
+---
+
+## 6. Playlist & Library State Engine
+
+### localStorage Schema
+
+```javascript
+// Key: "pulse_liked_songs" → Song[]
+// Key: "pulse_playlists"   → Playlist[]
+
+// Playlist shape:
+{
+  id:          "pl_1726667000000",  // Date.now() based unique ID
+  title:       "My Playlist",
+  description: "",
+  createdAt:   1726667000000,
+  songs:       [Song, Song, ...],   // full song objects stored inline
+  thumbnail:   "https://..."        // auto-set from first song
 }
 ```
 
-### Step 4: Auto-scroll + Click-to-seek
+### CRUD Operations
 
 ```javascript
-// In LyricsPanel.jsx — auto-scroll
+// CREATE
+const createPlaylist = (title) => {
+  const playlist = { id: `pl_${Date.now()}`, title, songs: [], thumbnail: '' };
+  setPlaylists(prev => [playlist, ...prev]);
+  return playlist.id; // return id so caller can immediately add songs
+};
+
+// ADD SONG (deduplication built-in)
+const addToPlaylist = (playlistId, song) => {
+  setPlaylists(prev => prev.map(p => {
+    if (p.id !== playlistId) return p;
+    if (p.songs.some(s => s.id === song.id)) return p; // already present
+    return { ...p, songs: [...p.songs, song], thumbnail: p.thumbnail || song.thumbnail };
+  }));
+};
+
+// REMOVE SONG
+const removeFromPlaylist = (playlistId, songId) => {
+  setPlaylists(prev => prev.map(p =>
+    p.id !== playlistId ? p : { ...p, songs: p.songs.filter(s => s.id !== songId) }
+  ));
+};
+
+// DELETE PLAYLIST
+const deletePlaylist = (id) => {
+  setPlaylists(prev => prev.filter(p => p.id !== id));
+};
+```
+
+### Persistence Pattern
+
+```javascript
+// useLibrary.js — auto-sync to localStorage on every state change
 useEffect(() => {
-  const activeEl = containerRef.current?.children[activeIndex];
-  activeEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  // 'block: center' keeps the active lyric at the optical center
-  // of the scroll container (not top or bottom)
-}, [activeIndex]);
+  localStorage.setItem('pulse_playlists', JSON.stringify(playlists));
+}, [playlists]); // runs whenever playlists changes
 
-// Click-to-seek
-<p onClick={() => seek(line.time)}>
-  {line.text}
-</p>
-// When clicked: seek(83.45) → audio.currentTime = 83.45
-// → 'timeupdate' fires → activeIndex recalculates → lyric updates
+// Initial load from localStorage
+const [playlists, setPlaylists] = useState(() => {
+  try { return JSON.parse(localStorage.getItem('pulse_playlists')) || []; }
+  catch { return []; }
+});
+// ↑ Lazy initializer (function form) — runs ONCE on mount, not every render
 ```
+
+### Why Store Full Song Objects?
+
+Storing the complete song object (including `streamUrl`) means:
+- Playlists work **offline** after first load — no re-fetch needed
+- `playCollection(playlist.songs)` works instantly without additional API calls
+- Trade-off: more localStorage space used, but typical song object is ~300 bytes
 
 ---
 
-## 5. API Integration Breakdown (Innertube Stack)
-
-Pulse uses a 3-layer API stack — **zero API keys required**.
-
-### Layer 1: Search (Piped API → Innertube)
-
-```
-User types "Blinding Lights" in SearchBar
-        │ (350ms debounce)
-        ▼
-searchSongs("Blinding Lights")
-        │
-        ▼ GET https://pipedapi.kavin.rocks/search
-              ?q=Blinding+Lights&filter=music_songs
-        │
-        ▼ Response: { items: [ { url, title, uploaderName, thumbnail, duration }, ... ] }
-        │
-        ▼ normalizeSearchItem() → { videoId, title, artist, thumbnail, duration }
-        │
-        ▼ setResults([...]) → renders dropdown list
-```
-
-**Why Piped?** Piped is an open-source YouTube frontend that wraps the Innertube API (YouTube's internal protocol). It returns structured JSON without requiring authentication.
-
-### Layer 2: Stream Resolution (Piped /streams)
-
-```
-User clicks a search result
-        │
-        ▼
-getSongStream("dQw4w9WgXcQ")
-        │
-        ▼ GET https://pipedapi.kavin.rocks/streams/dQw4w9WgXcQ
-        │
-        ▼ Response: {
-            title, uploader, thumbnailUrl, duration,
-            audioStreams: [
-              { url: "...", mimeType: "audio/mp4; codecs=mp4a", bitrate: 128000 },
-              { url: "...", mimeType: "audio/webm; codecs=opus", bitrate: 160000 },
-            ]
-          }
-        │
-        ▼ Sort by bitrate descending, prefer mp4a (wider browser support)
-        │
-        ▼ return { streamUrl: audioStreams[0].url, ... }
-        │
-        ▼ audio.src = streamUrl → browser fetches and plays
-```
-
-**Fallback chain:** 3 Piped instances are tried in order. If all fail, error is shown.
-
-### Layer 3: Synchronized Lyrics (lrclib.net)
-
-```
-After song loads (async, non-blocking):
-        │
-        ▼
-fetchLyrics("Blinding Lights", "The Weeknd", 200)
-        │
-        ▼ GET https://lrclib.net/api/search
-              ?track_name=Blinding+Lights&artist_name=The+Weeknd&duration=200
-        │
-        ▼ Response: [{ syncedLyrics: "[00:01.00] I been tryna...", ... }]
-        │
-        ├─ Has syncedLyrics? → use it directly (LRC format)
-        ├─ Has plainLyrics? → convert to timed LRC (5s per line)
-        └─ Neither? → use DEMO_LRC (always shows the karaoke engine working)
-        │
-        ▼ setLrcString(lrc) → triggers useLrcSync → lyrics panel updates live
-```
-
-**lrclib.net** is a free, community-driven lyrics database with synchronized LRC data for millions of tracks.
-
-### Complete Data Flow Diagram
-
-```
-Search Query
-     │
-     ▼
-Piped Search API ──► videoId + metadata
-     │
-     ▼
-Piped Streams API ──► streamUrl (mp4a audio)
-     │                              │
-     │                              ▼
-     │                    audio.src = streamUrl
-     │                    audio.play()
-     │                              │
-     ▼                              ▼
-lrclib.net ──► LRC string    timeupdate events
-     │                              │
-     ▼                              ▼
-parseLrc() ──► [{time, text}]  currentTime state
-     │                              │
-     └──────────────────────────────┘
-                     │
-                     ▼
-          getActiveLyricIndex()
-                     │
-                     ▼
-          LyricsPanel highlights
-          active line + auto-scrolls
-```
-
----
-
-*Built by Vikrant · Pulse Music App · Powered by Innertube / Piped / lrclib.net*
+*Built by Vikrant · Pulse Music App · Saavn.dev + lrclib.net + Nordic Nocturne Design System*

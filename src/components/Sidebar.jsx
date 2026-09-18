@@ -1,87 +1,107 @@
 import { usePlayer } from '../context/PlayerContext.jsx';
 
 const NAV_ITEMS = [
-  { icon: 'home',          label: 'Home',      path: 'home'      },
-  { icon: 'search',        label: 'Search',    path: 'search'    },
-  { icon: 'local_library', label: 'Library',   path: 'library'   },
-  { icon: 'favorite',      label: 'Favorites', path: 'favorites' },
-  { icon: 'queue_music',   label: 'Queue',     path: 'queue'     },
-];
-
-const PLAYLISTS = [
-  'Deep Focus',
-  'Late Night Ambient',
-  'Synthwave Drift',
-  'Acoustic Sanctuary',
-  'Spatial Audio Essentials',
+  { icon: 'home',          label: 'Home',     view: 'home'    },
+  { icon: 'local_library', label: 'Library',  view: 'library' },
+  { icon: 'favorite',      label: 'Liked',    view: 'liked'   },
 ];
 
 export default function Sidebar() {
-  const { view, setView } = usePlayer();
+  const { view, setView, playlists, liked, currentSong, playCollection, loadSong } = usePlayer();
 
   return (
-    <aside className="h-full w-60 glass-panel flex flex-col justify-between py-space-md px-space-md select-none border-r border-white/5">
-      {/* ── Logo ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-space-lg">
-        <div className="flex items-center gap-space-sm px-space-xs py-space-xs">
+    <aside className="h-full w-60 glass-panel flex flex-col justify-between py-4 px-3 border-r border-white/5 select-none overflow-hidden">
+      <div className="flex flex-col gap-4 min-h-0">
+        {/* Logo */}
+        <div className="flex items-center gap-2 px-1 py-1 flex-shrink-0">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-violet to-brand-pink flex items-center justify-center">
             <span className="text-white font-bold text-sm">P</span>
           </div>
           <span className="text-headline-sm font-semibold text-white tracking-tight">Pulse</span>
         </div>
 
-        {/* ── Navigation ─────────────────────────────────────────── */}
-        <nav className="flex flex-col gap-1">
+        {/* Nav */}
+        <nav className="flex flex-col gap-0.5 flex-shrink-0">
           {NAV_ITEMS.map(item => (
             <button
-              key={item.path}
-              onClick={() => item.path === 'home' && setView('home')}
-              className={`flex items-center gap-space-sm px-space-sm py-2 rounded-lg transition-all duration-200 text-left w-full ${
-                view === 'home' && item.path === 'home'
+              key={item.view}
+              onClick={() => setView(item.view === 'liked' ? 'library' : item.view)}
+              className={`flex items-center gap-2 px-2 py-2 rounded-lg transition-all duration-200 w-full text-left ${
+                view === item.view
                   ? 'bg-white/10 text-white'
                   : 'text-on-surface-variant hover:bg-white/5 hover:text-white'
               }`}
             >
               <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
               <span className="text-body-md font-medium">{item.label}</span>
+              {item.view === 'liked' && liked.length > 0 && (
+                <span className="ml-auto text-label-sm text-on-surface-variant bg-white/5 px-1.5 rounded">
+                  {liked.length}
+                </span>
+              )}
             </button>
           ))}
         </nav>
 
-        {/* ── Playlists ───────────────────────────────────────────── */}
-        <div className="flex flex-col gap-1">
-          <span className="text-label-sm uppercase tracking-widest text-outline px-space-sm mb-1">
-            Playlists
-          </span>
-          {PLAYLISTS.map(name => (
+        {/* Divider */}
+        <div className="h-px bg-white/8 flex-shrink-0" />
+
+        {/* Playlists list */}
+        <div className="flex flex-col gap-0.5 min-h-0 flex-1 overflow-hidden">
+          <div className="flex items-center justify-between px-1 mb-1 flex-shrink-0">
+            <span className="text-label-sm uppercase tracking-widest text-outline">Playlists</span>
             <button
-              key={name}
-              className="px-space-sm py-1.5 rounded-lg text-on-surface-variant hover:bg-white/5 hover:text-white text-body-sm truncate transition-colors text-left"
+              onClick={() => setView('library')}
+              className="text-outline hover:text-white transition-colors"
+              title="Manage playlists"
             >
-              {name}
+              <span className="material-symbols-outlined text-[16px]">add</span>
             </button>
-          ))}
+          </div>
+          <div className="flex flex-col gap-0.5 overflow-y-auto flex-1">
+            {playlists.length === 0 && (
+              <p className="text-body-sm text-outline px-1 py-2">No playlists yet</p>
+            )}
+            {playlists.map(pl => (
+              <button
+                key={pl.id}
+                onClick={() => {
+                  if (pl.songs.length) playCollection(pl.songs, 0);
+                }}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-on-surface-variant hover:bg-white/5 hover:text-white transition-colors text-left w-full group"
+              >
+                <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-violet/40 to-brand-pink/30 flex-shrink-0 overflow-hidden">
+                  {pl.thumbnail
+                    ? <img src={pl.thumbnail} className="w-full h-full object-cover" alt="" />
+                    : <span className="material-symbols-outlined text-[14px] text-white/40 m-auto block mt-1">queue_music</span>
+                  }
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-body-sm font-medium truncate group-hover:text-white transition-colors">
+                    {pl.title}
+                  </span>
+                  <span className="text-label-sm text-outline">{pl.songs.length} tracks</span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* ── User profile ────────────────────────────────────────── */}
-      <div className="p-space-xs bg-white/5 rounded-xl flex items-center justify-between">
-        <div className="flex items-center gap-space-sm">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-violet to-brand-pink flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-white text-[16px]">person</span>
+      {/* Now playing mini */}
+      {currentSong && (
+        <div className="flex-shrink-0 p-2 bg-white/5 rounded-xl flex items-center gap-2 mt-2">
+          <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 bg-white/10">
+            {currentSong.thumbnail && (
+              <img src={currentSong.thumbnail} className="w-full h-full object-cover" alt="" />
+            )}
           </div>
-          <div className="flex flex-col leading-tight min-w-0">
-            <span className="text-label-md font-semibold text-white truncate">Vikrant</span>
-            <span className="text-label-sm text-[#4cd7f6] flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#4cd7f6] inline-block animate-pulse" />
-              Hi-Fi Active
-            </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-label-sm font-semibold text-white truncate">{currentSong.title}</span>
+            <span className="text-label-sm text-on-surface-variant truncate">{currentSong.artist}</span>
           </div>
         </div>
-        <button className="p-1.5 rounded-lg text-on-surface-variant hover:text-white hover:bg-white/5 transition-colors">
-          <span className="material-symbols-outlined text-[18px]">settings</span>
-        </button>
-      </div>
+      )}
     </aside>
   );
 }
