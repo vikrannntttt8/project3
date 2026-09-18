@@ -12,7 +12,7 @@ export function PlayerProvider({ children }) {
   if (!audioRef.current && typeof window !== 'undefined') {
     audioRef.current = new Audio();
     audioRef.current.preload = 'metadata';
-    audioRef.current.crossOrigin = 'anonymous';
+    // crossOrigin omitted to allow HTML5 <audio> to stream cross-origin media without CORS header restrictions
     audioRef.current.volume = 0.8;
   }
 
@@ -26,6 +26,7 @@ export function PlayerProvider({ children }) {
 
   // ── Song & queue state ────────────────────────────────────────────
   const [currentSong, setCurrentSong] = useState(null);
+  const currentSongRef = useRef(null);
   const [queue,       setQueue]       = useState([]);
   const [queueIndex,  setQueueIndex]  = useState(0);
 
@@ -53,7 +54,15 @@ export function PlayerProvider({ children }) {
     const onWaiting      = () => setIsLoading(true);
     const onCanPlay      = () => setIsLoading(false);
     const onError        = (e) => {
-      console.error('[Audio] error:', e);
+      console.warn('[Audio] error event on stream:', audio.src, e);
+      const active = currentSongRef.current;
+      if (active?.backupStreamUrl && audio.src !== active.backupStreamUrl) {
+        console.log('[Audio] Auto-switching to backup 320kbps direct stream to ensure playback');
+        audio.src = active.backupStreamUrl;
+        audio.load();
+        audio.play().catch(console.error);
+        return;
+      }
       setIsPlaying(false);
       setIsLoading(false);
     };
@@ -150,43 +159,55 @@ export function PlayerProvider({ children }) {
       console.warn('[Piped] Stream extraction fallback:', err);
     }
 
-    // Resilient Fallback: If Piped public endpoint experiences network latency/outages,
-    // seamlessly fall back to the direct 320kbps full stream so audio never fails.
-    if (!directStream) {
-      if (Array.isArray(song.downloadUrl) && song.downloadUrl.length) {
-        const high320 = song.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
-        directStream = high320?.url || high320?.link || song.downloadUrl[song.downloadUrl.length - 1]?.url || song.downloadUrl[song.downloadUrl.length - 1]?.link || '';
-      } else if (song.streamUrl && !song.streamUrl.includes('_p.')) {
-        directStream = song.streamUrl;
-      }
+    // Extract backup 320kbps stream from song metadata to guarantee playback
+    let backupStream = '';
+    if (Array.isArray(song.downloadUrl) && song.downloadUrl.length) {
+      const high320 = song.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
+      backupStream = high320?.url || high320?.link || song.downloadUrl[song.downloadUrl.length - 1]?.url || song.downloadUrl[song.downloadUrl.length - 1]?.link || '';
+    } else if (song.streamUrl && !song.streamUrl.includes('_p.')) {
+      backupStream = song.streamUrl;
+    }
 
-      if (!directStream && song.id) {
-        try {
-          const fullDetail = await getSongById(song.id);
-          if (fullDetail?.downloadUrl?.length) {
-            const high320 = fullDetail.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
-            directStream = high320?.url || fullDetail.downloadUrl[fullDetail.downloadUrl.length - 1]?.url || fullDetail.streamUrl;
-          } else {
-            directStream = fullDetail?.streamUrl || '';
-          }
-        } catch (err) {
-          console.warn('Could not fetch song details for 320kbps link:', err);
+    if (!directStream && song.id && !backupStream) {
+      try {
+        const fullDetail = await getSongById(song.id);
+        if (fullDetail?.downloadUrl?.length) {
+          const high320 = fullDetail.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
+          backupStream = high320?.url || fullDetail.downloadUrl[fullDetail.downloadUrl.length - 1]?.url || fullDetail.streamUrl;
+        } else {
+          backupStream = fullDetail?.streamUrl || '';
         }
+      } catch (err) {
+        console.warn('Could not fetch backup song details for 320kbps link:', err);
       }
     }
 
-    const updatedSong = { ...song, streamUrl: directStream };
+    if (!directStream) {
+      directStream = backupStream;
+    }
+
+    const updatedSong = { ...song, streamUrl: directStream, backupStreamUrl: backupStream };
     setCurrentSong(updatedSong);
+    currentSongRef.current = updatedSong;
     if (newQueue) { setQueue(newQueue); setQueueIndex(newIndex); }
 
-    // Assign full MP3/MP4 link to active audio element
+    // Direct the HTML5 <audio> element to load the stream and verify playback beyond 0:30
     if (directStream) {
       audio.src = directStream;
       audio.load();
       audio.volume = volume;
       audio.play().catch(err => {
-        console.error('[Audio] play failed:', err);
-        setIsLoading(false);
+        console.warn('[Audio] Initial stream playback failed, trying backup:', err);
+        if (backupStream && audio.src !== backupStream) {
+          audio.src = backupStream;
+          audio.load();
+          audio.play().catch(e => {
+            console.error('[Audio] Backup playback failed:', e);
+            setIsLoading(false);
+          });
+        } else {
+          setIsLoading(false);
+        }
       });
     } else {
       setIsLoading(false);
