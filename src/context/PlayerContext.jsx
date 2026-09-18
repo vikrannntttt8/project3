@@ -228,13 +228,17 @@ export function PlayerProvider({ children }) {
     const cleanSong = { ...song };
     delete cleanSong.media_preview_url;
 
-    // Resolve YouTube video ID (fast metadata resolution, no REST stream extraction)
-    const resolvedVideoId = cleanSong.videoId || await resolveYouTubeVideoId(cleanSong.title, cleanSong.artist);
+    // Dynamically retrieve pre-mapped videoId or resolve dynamically
+    let targetVideoId = cleanSong.videoId || cleanSong.youtubeId;
+    if (!targetVideoId) {
+      targetVideoId = await resolveYouTubeVideoId(cleanSong.title, cleanSong.artist);
+    }
 
-    if (resolvedVideoId) {
-      cleanSong.videoId = resolvedVideoId;
+    if (targetVideoId) {
+      cleanSong.videoId = targetVideoId;
+      cleanSong.youtubeId = targetVideoId;
       if (typeof p.loadVideoById === 'function') {
-        p.loadVideoById(resolvedVideoId);
+        p.loadVideoById(targetVideoId);
       }
     } else {
       // Direct YouTube search playlist loading fallback

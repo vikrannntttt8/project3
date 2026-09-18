@@ -11,6 +11,7 @@
 
 import CryptoJS from 'crypto-js';
 import { DEMO_LRC } from './lrcParser.js';
+import { searchYouTubeTracks } from './youtubeEngine.js';
 
 // ── DES Decryption for JioSaavn 320kbps Streams ──────────────────────
 
@@ -97,12 +98,18 @@ export function normalizeSong(s) {
     stream = stream.replace(/_[0-9]+_p\.(mp4|mp3)/i, '_320.mp4');
   }
 
+  const coverUrl = bestImage(s.image || s.artworkUrl100 || s.thumbnail || s.cover);
+  const videoId = s.videoId || s.youtubeId || (s.id && typeof s.id === 'string' && s.id.length === 11 ? s.id : null);
+
   return {
-    id:          String(s.id || s.trackId || Math.random().toString(36).slice(2)),
+    id:          String(s.id || s.trackId || videoId || Math.random().toString(36).slice(2)),
+    videoId:     videoId,
+    youtubeId:   videoId,
     title:       s.name || s.title || s.song || s.trackName || 'Unknown Title',
-    artist:      artistStr(s.artists || s.primary_artists || s.singers || s.artistName),
+    artist:      artistStr(s.artists || s.primary_artists || s.singers || s.artistName) || s.artist || 'Unknown Artist',
     album:       s.album?.name || s.album || s.collectionName || '',
-    thumbnail:   bestImage(s.image || s.artworkUrl100 || s.thumbnail),
+    thumbnail:   coverUrl,
+    cover:       coverUrl,
     downloadUrl: downloadUrl,
     streamUrl:   stream,
     duration:    Number(s.duration || s.trackTimeMillis ? Math.round((s.trackTimeMillis || 0)/1000) : 0),
@@ -184,12 +191,19 @@ export async function searchAll(query) {
     return { songs: [], albums: [], artists: [], playlists: [] };
   }
 
+  // Pre-fetch native YouTube tracks with exact videoIds
+  let ytSongs = [];
+  try {
+    ytSongs = await searchYouTubeTracks(query, 12);
+  } catch {}
+
   // Tier 1: saavn.dev
   try {
     const json = await saavnApiFetch(`/search/all?query=${encodeURIComponent(query)}`);
     const d = json.data || {};
+    const saavnSongs = (d.songs?.results || []).map(normalizeSong).filter(Boolean);
     return {
-      songs:     (d.songs?.results     || []).map(normalizeSong).filter(Boolean),
+      songs:     ytSongs.length ? ytSongs : saavnSongs,
       albums:    (d.albums?.results    || []).map(normalizeAlbum).filter(Boolean),
       artists:   (d.artists?.results   || []).map(normalizeArtist).filter(Boolean),
       playlists: (d.playlists?.results || []).map(normalizePlaylist).filter(Boolean),
@@ -200,15 +214,16 @@ export async function searchAll(query) {
       const jioRes = await fetch(`https://www.jiosaavn.com/api.php?__call=autocomplete.get&_marker=0&query=${encodeURIComponent(query)}&ctx=android&_format=json`, { signal: AbortSignal.timeout(5000) });
       if (jioRes.ok) {
         const d = await jioRes.json();
+        const jioSongs = (d.songs?.data || []).map(s => normalizeSong({
+          id: s.id,
+          title: s.title,
+          album: s.album,
+          artists: s.more_info?.primary_artists || s.description,
+          image: s.image,
+          encrypted_media_url: s.more_info?.encrypted_media_url,
+        })).filter(Boolean);
         return {
-          songs: (d.songs?.data || []).map(s => normalizeSong({
-            id: s.id,
-            title: s.title,
-            album: s.album,
-            artists: s.more_info?.primary_artists || s.description,
-            image: s.image,
-            encrypted_media_url: s.more_info?.encrypted_media_url,
-          })).filter(Boolean),
+          songs: ytSongs.length ? ytSongs : jioSongs,
           albums: (d.albums?.data || []).map(a => normalizeAlbum({
             id: a.id,
             title: a.title,
@@ -227,7 +242,7 @@ export async function searchAll(query) {
       const itunesRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=15`, { signal: AbortSignal.timeout(5000) });
       if (itunesRes.ok) {
         const data = await itunesRes.json();
-        const songs = (data.results || []).map(s => normalizeSong({
+        const itunesSongs = (data.results || []).map(s => normalizeSong({
           id: String(s.trackId),
           name: s.trackName,
           artists: s.artistName,
@@ -238,16 +253,24 @@ export async function searchAll(query) {
           year: s.releaseDate ? s.releaseDate.slice(0, 4) : '',
         })).filter(Boolean);
 
-        return { songs, albums: [], artists: [], playlists: [] };
+        return { songs: ytSongs.length ? ytSongs : itunesSongs, albums: [], artists: [], playlists: [] };
       }
     } catch {}
 
-    return { songs: [], albums: [], artists: [], playlists: [] };
+    return { songs: ytSongs, albums: [], artists: [], playlists: [] };
   }
 }
 
 export async function searchSongs(query, limit = 20) {
   if (!query || !query.trim()) return [];
+
+  // Primary: Native YouTube Search mapping exact videoIds for window.YT.Player
+  try {
+    const ytSongs = await searchYouTubeTracks(query, limit);
+    if (ytSongs && ytSongs.length) {
+      return ytSongs;
+    }
+  } catch {}
 
   // Tier 1: saavn.dev
   try {
