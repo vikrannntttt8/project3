@@ -60,7 +60,7 @@ export default function LibraryView({ initialSection = 'playlists' }) {
   return (
     <div className="h-full flex flex-col overflow-y-auto">
       {/* ── Header ──────────────────────────────────────────── */}
-      <header className="sticky top-0 z-20 px-8 py-4 bg-[#09090B]/80 backdrop-blur-xl border-b border-white/5">
+      <header className="sticky top-0 z-20 px-4 sm:px-6 md:px-8 pl-14 md:pl-8 py-4 bg-[#09090B]/80 backdrop-blur-xl border-b border-white/5">
         <div className="flex items-center gap-4">
           {(activePlaylist || activeAlbum) && (
             <button
@@ -120,7 +120,7 @@ export default function LibraryView({ initialSection = 'playlists' }) {
       </header>
 
       {/* ── Main content ─────────────────────────────────────── */}
-      <main className="flex-1 px-8 py-6 pb-36">
+      <main className="flex-1 px-4 sm:px-6 md:px-8 py-6 pb-36">
         {/* Detail view for Playlist */}
         {activePlaylist && pl && (
           <CollectionDetail

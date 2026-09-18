@@ -183,11 +183,34 @@ input[type='range'].volume-slider::-webkit-slider-thumb {
 .visualizer-bar:nth-child(2) { animation-delay: 0.15s; }
 .visualizer-bar:nth-child(3) { animation-delay: 0.3s;  }
 
-/* ── glass-card utility (if not already present) ────────────────── */
-.glass-card {
-  background: rgba(18, 18, 21, 0.40);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+/* Page Transitions */
+@keyframes pageFadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
+
+.animate-page-slide {
+  animation: pageFadeSlide 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Responsive Mobile Breakpoints (@media max-width: 768px) */
+@media (max-width: 768px) {
+  .mobile-thumb-dock {
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    bottom: 0.5rem !important;
+  }
+
+  .glass-dock {
+    padding: 0.5rem 0.75rem !important;
+    border-radius: 1rem !important;
+  }
+}
+
 

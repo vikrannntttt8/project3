@@ -1,5 +1,5 @@
 import { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react';
-import { fetchSongLyrics } from '../utils/saavn.js';
+import { fetchSongLyrics, getSongById } from '../utils/saavn.js';
 import { DEMO_LRC } from '../utils/lrcParser.js';
 import { useLibrary } from '../hooks/useLibrary.js';
 
@@ -8,7 +8,7 @@ const PlayerContext = createContext(null);
 export function PlayerProvider({ children }) {
   // ── Single persistent Audio instance (no re-renders on src change) ──
   const audioRef = useRef(null);
-  if (!audioRef.current) {
+  if (!audioRef.current && typeof window !== 'undefined') {
     audioRef.current = new Audio();
     audioRef.current.preload = 'metadata';
     audioRef.current.crossOrigin = 'anonymous';
@@ -34,14 +34,15 @@ export function PlayerProvider({ children }) {
   const [lyricsLoading, setLyricsLoading] = useState(false);
 
   // ── View state ────────────────────────────────────────────────────
-  const [view, setView] = useState('home'); // 'home' | 'lyrics' | 'library'
+  const [view, setView] = useState('home'); // 'home' | 'lyrics' | 'library' | 'liked'
 
-  // ── Library (liked + playlists) ───────────────────────────────────
+  // ── Library (liked + playlists + custom albums) ───────────────────
   const library = useLibrary();
 
   // ── Wire Audio element events (once, on mount) ─────────────────────
   useEffect(() => {
     const audio = audioRef.current;
+    if (!audio) return;
 
     const onTimeUpdate   = () => setCurrentTime(audio.currentTime);
     const onDuration     = () => setDuration(audio.duration || 0);
@@ -81,21 +82,22 @@ export function PlayerProvider({ children }) {
   // ── Core playback actions ─────────────────────────────────────────
 
   const play = useCallback(() => {
-    audioRef.current.play().catch(console.error);
+    audioRef.current?.play().catch(console.error);
   }, []);
 
   const pause = useCallback(() => {
-    audioRef.current.pause();
+    audioRef.current?.pause();
   }, []);
 
   const togglePlay = useCallback(() => {
     const a = audioRef.current;
-    if (!a.src) return;
+    if (!a || !a.src) return;
     a.paused ? a.play().catch(console.error) : a.pause();
   }, []);
 
   const seek = useCallback((time) => {
     const a = audioRef.current;
+    if (!a) return;
     const clamped = Math.max(0, Math.min(time, a.duration || 0));
     a.currentTime = clamped;
     setCurrentTime(clamped);
@@ -103,15 +105,18 @@ export function PlayerProvider({ children }) {
 
   const changeVolume = useCallback((v) => {
     const clamped = Math.max(0, Math.min(1, v));
-    audioRef.current.volume = clamped;
-    audioRef.current.muted  = false;
+    if (audioRef.current) {
+      audioRef.current.volume = clamped;
+      audioRef.current.muted  = false;
+    }
     setVolume(clamped);
     setIsMuted(false);
   }, []);
 
   const toggleMute = useCallback(() => {
-    const a     = audioRef.current;
-    a.muted     = !a.muted;
+    const a = audioRef.current;
+    if (!a) return;
+    a.muted = !a.muted;
     setIsMuted(a.muted);
   }, []);
 
@@ -119,6 +124,7 @@ export function PlayerProvider({ children }) {
 
   const loadSong = useCallback(async (song, newQueue = null, newIndex = 0) => {
     const audio = audioRef.current;
+    if (!audio) return;
 
     audio.pause();
     setIsPlaying(false);
@@ -126,12 +132,38 @@ export function PlayerProvider({ children }) {
     setDuration(0);
     setIsLoading(true);
 
-    setCurrentSong(song);
+    // TASK 1: Full-length audio extraction (320kbps)
+    // Extract highest quality direct stream from song.downloadUrl array (quality: "320kbps" or last url)
+    // Do NOT use media_preview_url (prevents 30-second playback limit)
+    let directStream = '';
+    if (Array.isArray(song.downloadUrl) && song.downloadUrl.length) {
+      const high320 = song.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
+      directStream = high320?.url || high320?.link || song.downloadUrl[song.downloadUrl.length - 1]?.url || song.downloadUrl[song.downloadUrl.length - 1]?.link || '';
+    } else if (song.streamUrl && !song.streamUrl.includes('_p.')) {
+      directStream = song.streamUrl;
+    }
+
+    if (!directStream && song.id) {
+      try {
+        const fullDetail = await getSongById(song.id);
+        if (fullDetail?.downloadUrl?.length) {
+          const high320 = fullDetail.downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
+          directStream = high320?.url || fullDetail.downloadUrl[fullDetail.downloadUrl.length - 1]?.url || fullDetail.streamUrl;
+        } else {
+          directStream = fullDetail?.streamUrl || '';
+        }
+      } catch (err) {
+        console.warn('Could not fetch song details for 320kbps link:', err);
+      }
+    }
+
+    const updatedSong = { ...song, streamUrl: directStream };
+    setCurrentSong(updatedSong);
     if (newQueue) { setQueue(newQueue); setQueueIndex(newIndex); }
 
-    // Set stream URL and play
-    if (song.streamUrl) {
-      audio.src = song.streamUrl;
+    // Assign full MP3/MP4 link to active audio element
+    if (directStream) {
+      audio.src = directStream;
       audio.load();
       audio.volume = volume;
       audio.play().catch(err => {

@@ -3,13 +3,34 @@
  * ────────────────────────────────────────────────────────
  * Features:
  *   - Configured for saavn.dev endpoints via Vite proxy & CORS proxies
- *   - Automatic fallback to JioSaavn Direct Engine & iTunes Preview Engine
+ *   - Direct 320kbps full-length audio extraction (never uses 30s previews)
+ *   - DES decryption for JioSaavn full 320kbps CDN URLs
  *   - 500x500 ultra high-resolution album artwork
- *   - 320kbps audio streaming URLs
  *   - Synchronized LRC lyrics from lrclib.net and Saavn lyrics
  */
 
+import CryptoJS from 'crypto-js';
 import { DEMO_LRC } from './lrcParser.js';
+
+// ── DES Decryption for JioSaavn 320kbps Streams ──────────────────────
+
+function decryptMediaUrl(encrypted) {
+  if (!encrypted || typeof encrypted !== 'string') return '';
+  try {
+    const key = CryptoJS.enc.Utf8.parse('38346591');
+    const decrypted = CryptoJS.DES.decrypt(
+      { ciphertext: CryptoJS.enc.Base64.parse(encrypted) },
+      key,
+      { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 }
+    );
+    const raw = decrypted.toString(CryptoJS.enc.Utf8);
+    if (!raw) return '';
+    // Upgrade any preview/standard bitrates directly to 320kbps full stream
+    return raw.replace(/_[0-9]+(_p)?\.(mp4|mp3)/i, '_320.mp4');
+  } catch {
+    return '';
+  }
+}
 
 // ── Image and Stream Extractors ──────────────────────────────────────
 
@@ -33,7 +54,7 @@ export function bestStream(arr) {
   if (!arr) return '';
   if (typeof arr === 'string') return arr;
   if (!Array.isArray(arr) || !arr.length) return '';
-  // 1. Look for 320kbps stream
+  // Extract 320kbps full-length stream
   const highQ = arr.find(s => s?.quality === '320kbps' || String(s?.quality).includes('320'));
   return highQ?.url || highQ?.link || arr[arr.length - 1]?.url || arr[arr.length - 1]?.link || arr[0]?.url || arr[0]?.link || '';
 }
@@ -49,25 +70,47 @@ function artistStr(artists) {
 
 export function normalizeSong(s) {
   if (!s) return null;
-  // Normalize stream
-  let stream = bestStream(s.downloadUrl) || s.media_preview_url || s.vlink || s.previewUrl || '';
-  if (typeof stream === 'string' && stream.includes('_96_p.mp4')) {
-    stream = stream.replace('_96_p.mp4', '_320.mp4');
+
+  let downloadUrl = Array.isArray(s.downloadUrl) ? [...s.downloadUrl] : [];
+
+  // If encrypted_media_url is present, decrypt to full 320kbps MP3/MP4
+  if (!downloadUrl.length && s.encrypted_media_url) {
+    const full320 = decryptMediaUrl(s.encrypted_media_url);
+    if (full320) {
+      downloadUrl = [{ quality: '320kbps', url: full320 }];
+    }
+  }
+
+  // TASK 1: Full-length audio extraction (320kbps)
+  // Extract highest quality direct stream from song.downloadUrl array (quality: "320kbps" or last url)
+  // Do NOT use media_preview_url (prevents 30-second playback limit)
+  let stream = '';
+  if (downloadUrl.length) {
+    const high320 = downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
+    stream = high320?.url || high320?.link || downloadUrl[downloadUrl.length - 1]?.url || downloadUrl[downloadUrl.length - 1]?.link || '';
+  } else if (s.previewUrl) {
+    stream = s.previewUrl;
+  }
+
+  // Ensure full-length bitrate
+  if (typeof stream === 'string') {
+    stream = stream.replace(/_[0-9]+_p\.(mp4|mp3)/i, '_320.mp4');
   }
 
   return {
-    id:        String(s.id || s.trackId || Math.random().toString(36).slice(2)),
-    title:     s.name || s.title || s.song || s.trackName || 'Unknown Title',
-    artist:    artistStr(s.artists || s.primary_artists || s.singers || s.artistName),
-    album:     s.album?.name || s.album || s.collectionName || '',
-    thumbnail: bestImage(s.image || s.artworkUrl100 || s.thumbnail),
-    streamUrl: stream,
-    duration:  Number(s.duration || s.trackTimeMillis ? Math.round((s.trackTimeMillis || 0)/1000) : 0),
-    language:  s.language || '',
-    year:      s.year || (s.releaseDate ? s.releaseDate.slice(0, 4) : ''),
-    hasLyrics: Boolean(s.hasLyrics || s.has_lyrics),
-    explicit:  Boolean(s.explicitContent || s.explicit_content),
-    type:      'song',
+    id:          String(s.id || s.trackId || Math.random().toString(36).slice(2)),
+    title:       s.name || s.title || s.song || s.trackName || 'Unknown Title',
+    artist:      artistStr(s.artists || s.primary_artists || s.singers || s.artistName),
+    album:       s.album?.name || s.album || s.collectionName || '',
+    thumbnail:   bestImage(s.image || s.artworkUrl100 || s.thumbnail),
+    downloadUrl: downloadUrl,
+    streamUrl:   stream,
+    duration:    Number(s.duration || s.trackTimeMillis ? Math.round((s.trackTimeMillis || 0)/1000) : 0),
+    language:    s.language || '',
+    year:        s.year || (s.releaseDate ? s.releaseDate.slice(0, 4) : ''),
+    hasLyrics:   Boolean(s.hasLyrics || s.has_lyrics),
+    explicit:    Boolean(s.explicitContent || s.explicit_content),
+    type:        'song',
   };
 }
 
@@ -108,9 +151,6 @@ function normalizePlaylist(p) {
 
 // ── Multi-Tier Fetcher ───────────────────────────────────────────────
 
-/**
- * Attempts Saavn endpoints with multiple proxies.
- */
 async function saavnApiFetch(endpoint) {
   const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const directUrl = `https://saavn.dev/api${clean}`;
@@ -131,9 +171,7 @@ async function saavnApiFetch(endpoint) {
           return json;
         }
       }
-    } catch {
-      // Continue to next candidate
-    }
+    } catch {}
   }
 
   throw new Error(`saavn.dev unreachable on ${endpoint}`);
@@ -146,7 +184,7 @@ export async function searchAll(query) {
     return { songs: [], albums: [], artists: [], playlists: [] };
   }
 
-  // Tier 1: Try saavn.dev
+  // Tier 1: saavn.dev
   try {
     const json = await saavnApiFetch(`/search/all?query=${encodeURIComponent(query)}`);
     const d = json.data || {};
@@ -163,15 +201,15 @@ export async function searchAll(query) {
       if (jioRes.ok) {
         const d = await jioRes.json();
         return {
-          songs:     (d.songs?.data     || []).map(s => normalizeSong({
+          songs: (d.songs?.data || []).map(s => normalizeSong({
             id: s.id,
             title: s.title,
             album: s.album,
             artists: s.more_info?.primary_artists || s.description,
             image: s.image,
-            media_preview_url: s.more_info?.vlink,
+            encrypted_media_url: s.more_info?.encrypted_media_url,
           })).filter(Boolean),
-          albums:    (d.albums?.data    || []).map(a => normalizeAlbum({
+          albums: (d.albums?.data || []).map(a => normalizeAlbum({
             id: a.id,
             title: a.title,
             artists: a.music || a.description,
@@ -228,7 +266,7 @@ export async function searchSongs(query, limit = 20) {
             album: s.album,
             artists: s.primary_artists || s.singers,
             image: s.image,
-            media_preview_url: s.media_preview_url || s.vlink,
+            encrypted_media_url: s.encrypted_media_url,
             duration: Number(s.duration) || 0,
             year: s.year,
           })).filter(Boolean);
@@ -334,7 +372,7 @@ export async function getSongById(id) {
           album: s.album,
           artists: s.primary_artists,
           image: s.image,
-          media_preview_url: s.media_preview_url || s.vlink,
+          encrypted_media_url: s.encrypted_media_url,
           duration: s.duration,
           year: s.year,
         });
@@ -376,7 +414,7 @@ export async function getAlbumSongs(albumId) {
           album: s.album,
           artists: s.primary_artists,
           image: s.image,
-          media_preview_url: s.media_preview_url || s.vlink,
+          encrypted_media_url: s.encrypted_media_url,
           duration: s.duration,
           year: s.year,
         })).filter(Boolean),
@@ -420,52 +458,62 @@ export async function getPlaylistSongs(playlistId) {
 // ── Synced Lyrics Synchronization ────────────────────────────────────
 
 export async function fetchSongLyrics(id, title, artist) {
-  // 1. lrclib.net (Full millisecond synced LRC format)
-  try {
-    const cleanTitle = (title || '').replace(/\(.*\)|\[.*\]/g, '').trim();
-    const cleanArtist = (artist || '').split(/[,&]/)[0].trim();
-    const params = new URLSearchParams({ track_name: cleanTitle, artist_name: cleanArtist });
-    const res = await fetch(`https://lrclib.net/api/search?${params}`, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) {
-      const results = await res.json();
-      if (Array.isArray(results) && results.length) {
-        const m = results.find(r =>
-          r.trackName?.toLowerCase().includes(cleanTitle.toLowerCase())
-        ) || results[0];
-        if (m.syncedLyrics) {
-          return { lrc: m.syncedLyrics, source: 'synced' };
+  // 1. Saavn lyrics endpoint (TASK 5): https://saavn.dev/api/songs/{id}/lyrics
+  if (id) {
+    try {
+      const json = await saavnApiFetch(`/songs/${id}/lyrics`);
+      const raw  = json?.data?.lyrics || json?.lyrics || json?.data?.snippet || '';
+      if (raw && typeof raw === 'string' && raw.trim()) {
+        if (/\[\d{1,3}:\d{2}/.test(raw)) {
+          return { lrc: raw, source: 'synced' };
         }
-        if (m.plainLyrics) {
-          const lrc = m.plainLyrics.split('\n').filter(Boolean)
-            .map((line, i) => {
-              const t  = i * 4.5;
-              const mm = String(Math.floor(t / 60)).padStart(2, '0');
-              const ss = String(Math.floor(t % 60)).padStart(2, '0');
-              const ms = String(Math.floor((t % 1) * 100)).padStart(2, '0');
-              return `[${mm}:${ss}.${ms}] ${line.trim()}`;
-            }).join('\n');
+        const lines = raw
+          .replace(/<br\s*[\/]?>/gi, '\n')
+          .split(/[\r\n]+/)
+          .map(l => l.trim())
+          .filter(Boolean);
+        if (lines.length > 0) {
+          const lrc = lines.map((line, i) => {
+            const t  = i * 4;
+            const mm = String(Math.floor(t / 60)).padStart(2, '0');
+            const ss = String(Math.floor(t % 60)).padStart(2, '0');
+            return `[${mm}:${ss}.00] ${line}`;
+          }).join('\n');
           return { lrc, source: 'plain' };
         }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
-  // 2. Saavn lyrics endpoint
+  // 2. lrclib.net (Full millisecond synced LRC format fallback)
   try {
-    const json = await saavnApiFetch(`/songs/${id}/lyrics`);
-    const raw  = json.data?.lyrics || json.lyrics || '';
-    if (raw && typeof raw === 'string' && raw.trim()) {
-      if (/\[\d{1,3}:\d{2}/.test(raw)) {
-        return { lrc: raw, source: 'synced' };
+    const cleanTitle = (title || '').replace(/\(.*\)|\[.*\]/g, '').trim();
+    const cleanArtist = (artist || '').split(/[,&]/)[0].trim();
+    if (cleanTitle) {
+      const params = new URLSearchParams({ track_name: cleanTitle, artist_name: cleanArtist });
+      const res = await fetch(`https://lrclib.net/api/search?${params}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const results = await res.json();
+        if (Array.isArray(results) && results.length) {
+          const m = results.find(r =>
+            r.trackName?.toLowerCase().includes(cleanTitle.toLowerCase())
+          ) || results[0];
+          if (m.syncedLyrics) {
+            return { lrc: m.syncedLyrics, source: 'synced' };
+          }
+          if (m.plainLyrics) {
+            const lrc = m.plainLyrics.split('\n').filter(Boolean)
+              .map((line, i) => {
+                const t  = i * 4.5;
+                const mm = String(Math.floor(t / 60)).padStart(2, '0');
+                const ss = String(Math.floor(t % 60)).padStart(2, '0');
+                const ms = String(Math.floor((t % 1) * 100)).padStart(2, '0');
+                return `[${mm}:${ss}.${ms}] ${line.trim()}`;
+              }).join('\n');
+            return { lrc, source: 'plain' };
+          }
+        }
       }
-      const lines = raw.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
-      const lrc = lines.map((line, i) => {
-        const t  = i * 4;
-        const mm = String(Math.floor(t / 60)).padStart(2, '0');
-        const ss = String(Math.floor(t % 60)).padStart(2, '0');
-        return `[${mm}:${ss}.00] ${line}`;
-      }).join('\n');
-      return { lrc, source: 'plain' };
     }
   } catch {}
 

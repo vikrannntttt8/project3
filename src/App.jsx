@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { PlayerProvider, usePlayer } from './context/PlayerContext.jsx';
 import HomeView    from './components/HomeView/HomeView.jsx';
 import LyricsView  from './components/LyricsView/LyricsView.jsx';
@@ -7,6 +8,12 @@ import Sidebar     from './components/Sidebar.jsx';
 
 function AppShell() {
   const { view } = usePlayer();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Close mobile drawer on view change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [view]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] relative">
@@ -18,16 +25,40 @@ function AppShell() {
         <div className="absolute top-[30%] left-[40%] w-[30vw] h-[30vw] rounded-full bg-[#0c4a6e] opacity-15 blur-[120px]" />
       </div>
 
-      {/* ── Sidebar (hidden in fullscreen lyrics view) ───────── */}
-      <div className={`relative z-20 transition-all duration-500 flex-shrink-0 ${
-        view === 'lyrics' ? 'w-0 overflow-hidden opacity-0' : 'w-60 opacity-100'
-      }`}>
+      {/* ── Mobile Hamburger Toggle (Visible only on mobile when not in lyrics) ── */}
+      {view !== 'lyrics' && (
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="md:hidden fixed top-4 left-4 z-40 p-2 rounded-xl glass-panel text-white hover:bg-white/10 flex items-center justify-center shadow-lg border border-white/10"
+          aria-label="Toggle Navigation"
+        >
+          <span className="material-symbols-outlined text-[22px]">
+            {mobileMenuOpen ? 'close' : 'menu'}
+          </span>
+        </button>
+      )}
+
+      {/* ── Mobile Drawer Backdrop ────────────────────────────── */}
+      {mobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/60 backdrop-blur-sm transition-opacity"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar ───────────────────────────────────────────── */}
+      {/* On desktop: fixed left bar. On mobile: slide-over drawer */}
+      <div className={`
+        fixed inset-y-0 left-0 z-40 md:static md:z-20 transition-all duration-300 flex-shrink-0
+        ${view === 'lyrics' ? 'hidden md:w-0 md:overflow-hidden md:opacity-0' : ''}
+        ${mobileMenuOpen ? 'translate-x-0 w-64 shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-60'}
+      `}>
         <Sidebar />
       </div>
 
-      {/* ── Main content ─────────────────────────────────────── */}
+      {/* ── Main content with smooth transitions ─────────────── */}
       <div className="flex-1 relative z-10 overflow-hidden">
-        <div key={view} className="h-full w-full animate-fade-in">
+        <div key={view} className="h-full w-full animate-page-slide">
           {view === 'home'    && <HomeView />}
           {view === 'lyrics'  && <LyricsView />}
           {view === 'library' && <LibraryView initialSection="playlists" />}
@@ -35,8 +66,8 @@ function AppShell() {
         </div>
       </div>
 
-      {/* ── Persistent Glass Player Dock ─────────────────────── */}
-      <PlayerDock />
+      {/* ── Persistent Glass Player Dock (hidden in expanded lyrics view) ── */}
+      {view !== 'lyrics' && <PlayerDock />}
     </div>
   );
 }

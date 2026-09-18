@@ -188,39 +188,35 @@ export default function HomeView() {
       )}
 
       {/* ── Header ──────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-20 px-8 py-4 bg-[#09090B]/70 backdrop-blur-xl border-b border-white/5">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+      <header className="sticky top-0 z-20 px-4 sm:px-6 md:px-8 py-4 bg-[#09090B]/80 backdrop-blur-xl border-b border-white/5 pl-14 md:pl-8">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex flex-col">
-            <p className="text-label-sm uppercase tracking-widest text-on-surface-variant">
+            <p className="text-label-sm uppercase tracking-widest text-on-surface-variant text-[11px] sm:text-[12px]">
               {showSearch ? `Results for "${query}"` : 'Pulse · Spatial Studio'}
             </p>
-            <h1 className="text-headline-lg font-bold text-white tracking-tight">
+            <h1 className="text-headline-md sm:text-headline-lg font-bold text-white tracking-tight">
               {showSearch ? 'Search Results' : `${getGreeting()}, Vikrant`}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 sm:flex-initial justify-end">
             <SearchBar
               query={query}
               onChange={search}
               onClear={clear}
             />
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/8">
-              <span className="material-symbols-outlined text-[#4cd7f6] text-[16px]">graphic_eq</span>
-              <span className="text-label-sm font-semibold text-white uppercase tracking-wide">Saavn · 320kbps</span>
-            </div>
           </div>
         </div>
 
         {/* ── Search Tabs ─────────────────────────────────────── */}
         {showSearch && (
-          <div className="flex items-center gap-1 mt-3 overflow-x-auto pb-0.5">
+          <div className="flex items-center gap-1.5 mt-3 overflow-x-auto pb-1 no-scrollbar">
             {SEARCH_TABS.map(tab => (
               <button
                 key={tab}
                 onClick={() => switchTab(tab)}
-                className={`px-4 py-1.5 rounded-full text-label-md font-medium whitespace-nowrap transition-all ${
+                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-label-md font-medium whitespace-nowrap transition-all text-[13px] sm:text-[14px] ${
                   activeTab === tab
-                    ? 'bg-white text-black'
+                    ? 'bg-white text-black font-semibold'
                     : 'bg-white/8 text-on-surface-variant hover:bg-white/12 hover:text-white'
                 }`}
               >
@@ -232,7 +228,7 @@ export default function HomeView() {
       </header>
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <main className="flex-1 px-8 py-6 pb-36">
+      <main className="flex-1 px-4 sm:px-6 md:px-8 py-5 sm:py-6 pb-36">
         {showSearch
           ? renderResults()
           : <HomeDefault onPlaySong={handlePlaySong} />

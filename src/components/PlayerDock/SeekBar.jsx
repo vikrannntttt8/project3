@@ -4,13 +4,13 @@ export default function SeekBar({ currentTime, duration, onSeek }) {
   const progress = duration ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="w-full flex items-center gap-space-sm">
-      <span className="text-label-sm text-on-surface-variant w-8 text-right tabular-nums font-mono">
+    <div className="w-full flex items-center gap-2.5 select-none">
+      <span className="text-label-sm text-on-surface-variant min-w-[38px] text-right tabular-nums font-mono text-[12px]">
         {formatTime(currentTime)}
       </span>
 
       {/* Track bar */}
-      <div className="relative flex-1 h-1 group cursor-pointer">
+      <div className="relative flex-1 h-1 group cursor-pointer flex items-center">
         {/* Background track */}
         <div className="absolute inset-0 bg-white/15 rounded-full overflow-hidden">
           {/* Fill gradient */}
@@ -31,12 +31,12 @@ export default function SeekBar({ currentTime, duration, onSeek }) {
         />
         {/* Thumb indicator */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
           style={{ left: `calc(${progress}% - 6px)` }}
         />
       </div>
 
-      <span className="text-label-sm text-on-surface-variant w-8 tabular-nums font-mono">
+      <span className="text-label-sm text-on-surface-variant min-w-[38px] text-left tabular-nums font-mono text-[12px]">
         {formatTime(duration)}
       </span>
     </div>
