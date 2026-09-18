@@ -60,7 +60,7 @@ export default function PlayerDock() {
                 {/* Heart / Like button */}
                 <button
                   onClick={() => toggleLike(currentSong)}
-                  className={`p-1 rounded-full transition-transform active:scale-90 ${
+                  className={`player-dock-btn p-1 rounded-full transition-transform active:scale-90 ${
                     liked ? 'text-brand-pink' : 'text-on-surface-variant hover:text-brand-pink'
                   }`}
                   title={liked ? 'Unlike' : 'Like'}
@@ -74,7 +74,7 @@ export default function PlayerDock() {
                 {/* TASK 3: Add to Playlist button */}
                 <button
                   onClick={() => setAddMenuSong(currentSong)}
-                  className="p-1 rounded-full text-on-surface-variant hover:text-white transition-colors"
+                  className="player-dock-btn p-1 rounded-full text-on-surface-variant hover:text-white transition-colors"
                   title="Add to playlist"
                 >
                   <span className="material-symbols-outlined text-[19px] sm:text-[20px]">
@@ -95,7 +95,7 @@ export default function PlayerDock() {
 
               <button
                 onClick={playPrev}
-                className="text-on-surface-variant hover:text-white transition-colors disabled:opacity-30 p-1"
+                className="player-dock-btn text-on-surface-variant hover:text-white transition-colors disabled:opacity-30 p-1"
                 disabled={!currentSong}
               >
                 <span className="material-symbols-outlined text-[22px] sm:text-[24px]">skip_previous</span>
@@ -105,7 +105,7 @@ export default function PlayerDock() {
               <button
                 onClick={togglePlay}
                 disabled={!currentSong}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all duration-150 shadow-lg shadow-white/10 disabled:opacity-40"
+                className="player-dock-btn w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all duration-150 shadow-lg shadow-white/10 disabled:opacity-40"
               >
                 {isLoading ? (
                   <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -119,7 +119,7 @@ export default function PlayerDock() {
 
               <button
                 onClick={playNext}
-                className="text-on-surface-variant hover:text-white transition-colors disabled:opacity-30 p-1"
+                className="player-dock-btn text-on-surface-variant hover:text-white transition-colors disabled:opacity-30 p-1"
                 disabled={!currentSong}
               >
                 <span className="material-symbols-outlined text-[22px] sm:text-[24px]">skip_next</span>

@@ -22,13 +22,7 @@ export default function LyricsView() {
           </span>
         </button>
 
-        {/* Audio quality pill */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-white/4 border border-white/6">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#4cd7f6] animate-pulse" />
-          <span className="text-[11px] font-medium tracking-wide text-on-surface-variant uppercase">
-            Lossless · 24-bit/192kHz Spatial
-          </span>
-        </div>
+
 
         {/* Right controls */}
         <div className="flex items-center gap-5 text-on-surface-variant">

@@ -199,26 +199,12 @@ input[type='range'].volume-slider::-webkit-slider-thumb {
   animation: pageFadeSlide 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Responsive Mobile Breakpoints (@media max-width: 768px) */
+/* TASK 3: Mobile Responsive Optimization (@media max-width: 768px) */
 @media (max-width: 768px) {
-  .mobile-thumb-dock {
+  .player-dock-wrap {
     left: 0.5rem !important;
     right: 0.5rem !important;
     bottom: 0.5rem !important;
-  }
-
-  .glass-dock {
-    padding: 0.5rem 0.75rem !important;
-    border-radius: 1rem !important;
-  }
-}
-
-/* TASK 3: Mobile UI Adjustments (@media max-width: 640px) */
-@media (max-width: 640px) {
-  .player-dock-wrap {
-    left: 0.35rem !important;
-    right: 0.35rem !important;
-    bottom: 0.35rem !important;
   }
 
   /* Compact dock height between 60px and 70px */
@@ -227,24 +213,34 @@ input[type='range'].volume-slider::-webkit-slider-thumb {
     height: 64px !important;
     min-height: 60px !important;
     max-height: 70px !important;
-    padding: 0.3rem 0.6rem !important;
-    border-radius: 0.875rem !important;
-    gap: 0.4rem !important;
+    padding: 0.35rem 0.65rem !important;
+    border-radius: 1rem !important;
+    gap: 0.5rem !important;
   }
 
   .player-dock-thumb {
-    width: 2.25rem !important;
-    height: 2.25rem !important;
+    width: 2.5rem !important;
+    height: 2.5rem !important;
     border-radius: 0.5rem !important;
   }
 
   .player-dock-title {
-    font-size: 12px !important;
+    font-size: 12.5px !important;
     line-height: 1.15 !important;
   }
 
   .player-dock-artist {
-    font-size: 10px !important;
+    font-size: 10.5px !important;
+  }
+
+  /* Touch targets easy to tap on smaller screens */
+  .player-dock-btn {
+    min-width: 38px !important;
+    min-height: 38px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    touch-action: manipulation;
   }
 
   /* Touch-accessible, properly padded Settings button */

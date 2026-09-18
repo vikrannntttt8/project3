@@ -30,6 +30,11 @@ export function PlayerProvider({ children }) {
   const [queue,       setQueue]       = useState([]);
   const [queueIndex,  setQueueIndex]  = useState(0);
 
+  // ── Playback Engine State ('audio' | 'youtube') ───────────────────
+  const [playbackEngine, setPlaybackEngine] = useState('audio');
+  const ytPlayerRef = useRef(null);
+  const ytReadyRef  = useRef(false);
+
   // ── Lyrics state ──────────────────────────────────────────────────
   const [lrcString,    setLrcString]    = useState(DEMO_LRC);
   const [lyricsSource, setLyricsSource] = useState('demo');
@@ -41,13 +46,114 @@ export function PlayerProvider({ children }) {
   // ── Library (liked + playlists + custom albums) ───────────────────
   const library = useLibrary();
 
+  // ── Initialize YouTube IFrame Player API (Fallback Engine) ────────
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Inject YouTube IFrame API if not present
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      if (firstScriptTag && firstScriptTag.parentNode) {
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+      } else {
+        document.head.appendChild(tag);
+      }
+    }
+
+    const initYT = () => {
+      if (window.YT && window.YT.Player && !ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current = new window.YT.Player('pulse-yt-player', {
+            height: '1',
+            width: '1',
+            playerVars: {
+              autoplay: 1,
+              controls: 0,
+              disablekb: 1,
+              fs: 0,
+              modestbranding: 1,
+              rel: 0,
+              origin: window.location.origin,
+            },
+            events: {
+              onReady: () => {
+                ytReadyRef.current = true;
+              },
+              onStateChange: (event) => {
+                if (event.data === window.YT.PlayerState.PLAYING) {
+                  setIsPlaying(true);
+                  setIsLoading(false);
+                } else if (event.data === window.YT.PlayerState.PAUSED) {
+                  setIsPlaying(false);
+                } else if (event.data === window.YT.PlayerState.ENDED) {
+                  setIsPlaying(false);
+                  playNext();
+                } else if (event.data === window.YT.PlayerState.BUFFERING) {
+                  setIsLoading(true);
+                }
+              },
+              onError: (err) => {
+                console.warn('[YT Player] Fallback triggered on error:', err?.data);
+                const active = currentSongRef.current;
+                if (active?.backupStreamUrl) {
+                  setPlaybackEngine('audio');
+                  const a = audioRef.current;
+                  if (a) {
+                    a.src = active.backupStreamUrl;
+                    a.load();
+                    a.play().catch(console.error);
+                  }
+                }
+              },
+            },
+          });
+        } catch (e) {
+          console.warn('[YT Player] Initialization error:', e);
+        }
+      }
+    };
+
+    window.onYouTubeIframeAPIReady = initYT;
+    const interval = setInterval(() => {
+      if (window.YT?.Player && !ytPlayerRef.current) initYT();
+      else if (ytPlayerRef.current) clearInterval(interval);
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Sync YouTube IFrame playback position ─────────────────────────
+  useEffect(() => {
+    let timer = null;
+    if (playbackEngine === 'youtube' && isPlaying) {
+      timer = setInterval(() => {
+        const p = ytPlayerRef.current;
+        if (p && typeof p.getCurrentTime === 'function') {
+          const t = p.getCurrentTime();
+          const d = p.getDuration();
+          if (typeof t === 'number') setCurrentTime(t);
+          if (typeof d === 'number' && d > 0) setDuration(d);
+        }
+      }, 250);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [playbackEngine, isPlaying]);
+
   // ── Wire Audio element events (once, on mount) ─────────────────────
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onTimeUpdate   = () => setCurrentTime(audio.currentTime);
-    const onDuration     = () => setDuration(audio.duration || 0);
+    const onTimeUpdate   = () => {
+      if (playbackEngine === 'audio') setCurrentTime(audio.currentTime);
+    };
+    const onDuration     = () => {
+      if (playbackEngine === 'audio') setDuration(audio.duration || 0);
+    };
     const onEnded        = () => { setIsPlaying(false); playNext(); };
     const onPlay         = () => { setIsPlaying(true);  setIsLoading(false); };
     const onPause        = () => setIsPlaying(false);
@@ -56,13 +162,25 @@ export function PlayerProvider({ children }) {
     const onError        = (e) => {
       console.warn('[Audio] error event on stream:', audio.src, e);
       const active = currentSongRef.current;
+
+      // Fallback 1: If YouTube videoId is available, switch to YouTube IFrame player
+      if (active?.videoId && ytPlayerRef.current) {
+        console.log('[Audio] Fallback: Switching to YouTube IFrame player for video:', active.videoId);
+        setPlaybackEngine('youtube');
+        ytPlayerRef.current.loadVideoById(active.videoId);
+        ytPlayerRef.current.playVideo();
+        return;
+      }
+
+      // Fallback 2: Direct 320kbps backup stream
       if (active?.backupStreamUrl && audio.src !== active.backupStreamUrl) {
-        console.log('[Audio] Auto-switching to backup 320kbps direct stream to ensure playback');
+        console.log('[Audio] Fallback: Switching to backup 320kbps direct stream');
         audio.src = active.backupStreamUrl;
         audio.load();
         audio.play().catch(console.error);
         return;
       }
+
       setIsPlaying(false);
       setIsLoading(false);
     };
@@ -87,31 +205,53 @@ export function PlayerProvider({ children }) {
       audio.removeEventListener('error',          onError);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [playbackEngine]);
 
-  // ── Core playback actions ─────────────────────────────────────────
+  // ── Core playback actions (Unified Audio + YouTube) ───────────────
 
   const play = useCallback(() => {
-    audioRef.current?.play().catch(console.error);
-  }, []);
+    if (playbackEngine === 'youtube') {
+      ytPlayerRef.current?.playVideo();
+    } else {
+      audioRef.current?.play().catch(console.error);
+    }
+  }, [playbackEngine]);
 
   const pause = useCallback(() => {
-    audioRef.current?.pause();
-  }, []);
+    if (playbackEngine === 'youtube') {
+      ytPlayerRef.current?.pauseVideo();
+    } else {
+      audioRef.current?.pause();
+    }
+  }, [playbackEngine]);
 
   const togglePlay = useCallback(() => {
-    const a = audioRef.current;
-    if (!a || !a.src) return;
-    a.paused ? a.play().catch(console.error) : a.pause();
-  }, []);
+    if (playbackEngine === 'youtube') {
+      const p = ytPlayerRef.current;
+      if (!p) return;
+      isPlaying ? p.pauseVideo() : p.playVideo();
+    } else {
+      const a = audioRef.current;
+      if (!a || !a.src) return;
+      a.paused ? a.play().catch(console.error) : a.pause();
+    }
+  }, [playbackEngine, isPlaying]);
 
   const seek = useCallback((time) => {
-    const a = audioRef.current;
-    if (!a) return;
-    const clamped = Math.max(0, Math.min(time, a.duration || 0));
-    a.currentTime = clamped;
-    setCurrentTime(clamped);
-  }, []);
+    if (playbackEngine === 'youtube') {
+      const p = ytPlayerRef.current;
+      if (p && typeof p.seekTo === 'function') {
+        p.seekTo(time, true);
+        setCurrentTime(time);
+      }
+    } else {
+      const a = audioRef.current;
+      if (!a) return;
+      const clamped = Math.max(0, Math.min(time, a.duration || 0));
+      a.currentTime = clamped;
+      setCurrentTime(clamped);
+    }
+  }, [playbackEngine]);
 
   const changeVolume = useCallback((v) => {
     const clamped = Math.max(0, Math.min(1, v));
@@ -119,15 +259,24 @@ export function PlayerProvider({ children }) {
       audioRef.current.volume = clamped;
       audioRef.current.muted  = false;
     }
+    if (ytPlayerRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
+      ytPlayerRef.current.setVolume(clamped * 100);
+      ytPlayerRef.current.unMute();
+    }
     setVolume(clamped);
     setIsMuted(false);
   }, []);
 
   const toggleMute = useCallback(() => {
     const a = audioRef.current;
-    if (!a) return;
-    a.muted = !a.muted;
-    setIsMuted(a.muted);
+    if (a) {
+      a.muted = !a.muted;
+      setIsMuted(a.muted);
+    }
+    if (ytPlayerRef.current && typeof ytPlayerRef.current.isMuted === 'function') {
+      if (ytPlayerRef.current.isMuted()) ytPlayerRef.current.unMute();
+      else ytPlayerRef.current.mute();
+    }
   }, []);
 
   // ── Load a song into the audio engine ─────────────────────────────
@@ -136,28 +285,15 @@ export function PlayerProvider({ children }) {
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Stop current audio and YouTube player before loading next
     audio.pause();
+    if (ytPlayerRef.current && typeof ytPlayerRef.current.stopVideo === 'function') {
+      try { ytPlayerRef.current.stopVideo(); } catch (_) {}
+    }
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setIsLoading(true);
-
-    // TASK 2: PIPED YOUTUBE STREAM INTEGRATION
-    // 1. Replace Saavn stream extractor in playback handler to bypass 30-second preview limit
-    // 2. Search query: https://pipedapi.kavin.rocks/search?q={songName}&filter=music_songs
-    // 3. Details: https://pipedapi.kavin.rocks/streams/{videoId}
-    // 4. Extract highest bitrate item (stream.mimeType === "audio/webm" or "audio/mp4")
-    // 5. Set direct URL as <audio src={streamUrl}> source
-    let directStream = '';
-
-    try {
-      const piped = await getPipedAudioStream(song.title, song.artist);
-      if (piped?.streamUrl) {
-        directStream = piped.streamUrl;
-      }
-    } catch (err) {
-      console.warn('[Piped] Stream extraction fallback:', err);
-    }
 
     // Extract backup 320kbps stream from song metadata to guarantee playback
     let backupStream = '';
@@ -168,7 +304,7 @@ export function PlayerProvider({ children }) {
       backupStream = song.streamUrl;
     }
 
-    if (!directStream && song.id && !backupStream) {
+    if (!backupStream && song.id) {
       try {
         const fullDetail = await getSongById(song.id);
         if (fullDetail?.downloadUrl?.length) {
@@ -182,33 +318,62 @@ export function PlayerProvider({ children }) {
       }
     }
 
-    if (!directStream) {
-      directStream = backupStream;
+    // TASK 1: MULTI-FALLBACK YOUTUBE STREAM PARSER
+    // Primary: Route search & stream through Piped (corsproxy.io / api.piped.privacydev.net)
+    // Fallback: Invidious API instance & YouTube IFrame background player
+    let directStream = '';
+    let ytVideoId = song.videoId || '';
+
+    try {
+      const ytData = await getPipedAudioStream(song.title, song.artist);
+      if (ytData?.streamUrl) {
+        directStream = ytData.streamUrl;
+      }
+      if (ytData?.videoId) {
+        ytVideoId = ytData.videoId;
+      }
+    } catch (err) {
+      console.warn('[YouTube Parser] Fallback:', err);
     }
 
-    const updatedSong = { ...song, streamUrl: directStream, backupStreamUrl: backupStream };
+    const updatedSong = {
+      ...song,
+      streamUrl: directStream || backupStream,
+      backupStreamUrl: backupStream,
+      videoId: ytVideoId,
+    };
     setCurrentSong(updatedSong);
     currentSongRef.current = updatedSong;
     if (newQueue) { setQueue(newQueue); setQueueIndex(newIndex); }
 
-    // Direct the HTML5 <audio> element to load the stream and verify playback beyond 0:30
+    // Start playback:
     if (directStream) {
+      setPlaybackEngine('audio');
       audio.src = directStream;
       audio.load();
       audio.volume = volume;
       audio.play().catch(err => {
-        console.warn('[Audio] Initial stream playback failed, trying backup:', err);
-        if (backupStream && audio.src !== backupStream) {
+        console.warn('[Audio] Direct stream play failed, switching to YouTube IFrame / backup:', err);
+        if (ytVideoId && ytPlayerRef.current) {
+          setPlaybackEngine('youtube');
+          ytPlayerRef.current.loadVideoById(ytVideoId);
+          ytPlayerRef.current.playVideo();
+        } else if (backupStream) {
           audio.src = backupStream;
           audio.load();
-          audio.play().catch(e => {
-            console.error('[Audio] Backup playback failed:', e);
-            setIsLoading(false);
-          });
-        } else {
-          setIsLoading(false);
+          audio.play().catch(console.error);
         }
       });
+    } else if (ytVideoId && ytPlayerRef.current) {
+      setPlaybackEngine('youtube');
+      ytPlayerRef.current.loadVideoById(ytVideoId);
+      ytPlayerRef.current.playVideo();
+    } else if (backupStream) {
+      setPlaybackEngine('audio');
+      audio.src = backupStream;
+      audio.load();
+      audio.volume = volume;
+      audio.play().catch(console.error);
     } else {
       setIsLoading(false);
     }
@@ -277,6 +442,24 @@ export function PlayerProvider({ children }) {
   return (
     <PlayerContext.Provider value={value}>
       {children}
+      {/* Hidden YouTube IFrame Background Player for seamless continuous playback */}
+      <div
+        id="pulse-yt-wrapper"
+        style={{
+          position: 'fixed',
+          top: '-9999px',
+          left: '-9999px',
+          width: '1px',
+          height: '1px',
+          opacity: 0,
+          pointerEvents: 'none',
+          visibility: 'hidden',
+          zIndex: -1,
+        }}
+        aria-hidden="true"
+      >
+        <div id="pulse-yt-player" />
+      </div>
     </PlayerContext.Provider>
   );
 }
