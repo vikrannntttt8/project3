@@ -5,9 +5,11 @@ export default function AlbumArtPanel() {
   const {
     currentSong, isPlaying, togglePlay,
     currentTime, duration, seek, volume, changeVolume,
+    isLiked, toggleLike, playPrev, playNext,
   } = usePlayer();
 
   const progress = duration ? (currentTime / duration) * 100 : 0;
+  const liked = currentSong ? isLiked(currentSong.id) : false;
 
   return (
     <section className="lg:col-span-6 flex flex-col justify-center items-center lg:items-start w-full max-w-[430px] mx-auto lg:mx-0">
@@ -41,11 +43,20 @@ export default function AlbumArtPanel() {
             </span>
           </div>
         </div>
-        <button className="text-on-surface-variant hover:text-brand-pink transition-colors duration-200 p-2 rounded-full hover:bg-white/5">
-          <svg className="w-6 h-6 stroke-current fill-none" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        {currentSong && (
+          <button
+            onClick={() => toggleLike(currentSong)}
+            className={`p-2 rounded-full transition-transform active:scale-90 hover:bg-white/5 ${
+              liked ? 'text-brand-pink' : 'text-on-surface-variant hover:text-brand-pink'
+            }`}
+            title={liked ? 'Unlike' : 'Like'}
+          >
+            <span className="material-symbols-outlined text-[28px]"
+              style={{fontVariationSettings:`'FILL' ${liked ? 1 : 0}`}}>
+              favorite
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Seek bar */}
@@ -78,21 +89,30 @@ export default function AlbumArtPanel() {
         <button className="text-on-surface-variant hover:text-white transition-colors">
           <span className="material-symbols-outlined text-[22px]">shuffle</span>
         </button>
-        <button className="text-on-surface-variant hover:text-white transition-colors">
+        <button
+          onClick={playPrev}
+          disabled={!currentSong}
+          className="text-on-surface-variant hover:text-white transition-colors disabled:opacity-40"
+        >
           <span className="material-symbols-outlined text-[28px]">skip_previous</span>
         </button>
 
         {/* Main play/pause */}
         <button
           onClick={togglePlay}
-          className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all duration-200 shadow-xl shadow-white/10"
+          disabled={!currentSong}
+          className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all duration-200 shadow-xl shadow-white/10 disabled:opacity-40"
         >
           <span className="material-symbols-outlined text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>
             {isPlaying ? 'pause' : 'play_arrow'}
           </span>
         </button>
 
-        <button className="text-on-surface-variant hover:text-white transition-colors">
+        <button
+          onClick={playNext}
+          disabled={!currentSong}
+          className="text-on-surface-variant hover:text-white transition-colors disabled:opacity-40"
+        >
           <span className="material-symbols-outlined text-[28px]">skip_next</span>
         </button>
         <button className="text-on-surface-variant hover:text-white transition-colors">

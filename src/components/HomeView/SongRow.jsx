@@ -56,13 +56,17 @@ export default function SongRow({ song, index, isActive, isPlaying, onPlay, onAd
       </span>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className={`flex items-center gap-2 flex-shrink-0 transition-opacity ${
+        liked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+      }`}>
         <button
           onClick={e => { e.stopPropagation(); toggleLike(song); }}
-          className={`p-1.5 rounded-full transition-colors ${liked ? 'text-brand-pink' : 'text-on-surface-variant hover:text-brand-pink'}`}
+          className={`p-1.5 rounded-full transition-transform active:scale-90 ${
+            liked ? 'text-brand-pink' : 'text-on-surface-variant hover:text-brand-pink'
+          }`}
           title={liked ? 'Unlike' : 'Like'}
         >
-          <span className="material-symbols-outlined text-[18px]" style={{fontVariationSettings:`'FILL' ${liked ? 1 : 0}`}}>
+          <span className="material-symbols-outlined text-[20px]" style={{fontVariationSettings:`'FILL' ${liked ? 1 : 0}`}}>
             favorite
           </span>
         </button>
@@ -71,7 +75,7 @@ export default function SongRow({ song, index, isActive, isPlaying, onPlay, onAd
           className="p-1.5 rounded-full text-on-surface-variant hover:text-white transition-colors"
           title="Add to playlist"
         >
-          <span className="material-symbols-outlined text-[18px]">playlist_add</span>
+          <span className="material-symbols-outlined text-[20px]">playlist_add</span>
         </button>
       </div>
 

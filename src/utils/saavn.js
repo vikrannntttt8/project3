@@ -1,225 +1,473 @@
 /**
- * saavn.js — Saavn.dev API Wrapper (Full)
- * ─────────────────────────────────────────────
- * CORS-friendly, no auth, 320kbps MP3 streams.
+ * saavn.js — Saavn API & Resilient Music Streaming Engine
+ * ────────────────────────────────────────────────────────
+ * Features:
+ *   - Configured for saavn.dev endpoints via Vite proxy & CORS proxies
+ *   - Automatic fallback to JioSaavn Direct Engine & iTunes Preview Engine
+ *   - 500x500 ultra high-resolution album artwork
+ *   - 320kbps audio streaming URLs
+ *   - Synchronized LRC lyrics from lrclib.net and Saavn lyrics
  */
 
 import { DEMO_LRC } from './lrcParser.js';
 
-const BASE = 'https://saavn.dev/api';
+// ── Image and Stream Extractors ──────────────────────────────────────
 
-// ── Internal helpers ─────────────────────────────────────────────────
-
-function bestImage(arr) {
+export function bestImage(arr) {
+  if (!arr) return '';
+  if (typeof arr === 'string') {
+    return arr.replace(/-(?:50x50|150x150)\.(jpg|webp|png)/i, '-500x500.$1');
+  }
   if (!Array.isArray(arr) || !arr.length) return '';
-  return arr[arr.length - 1]?.url || arr[0]?.url || '';
+  // 1. Check for explicit 500x500 image object
+  const highRes = arr.find(img => img?.quality === '500x500' || String(img?.quality).includes('500'));
+  let url = highRes?.url || highRes?.link || arr[arr.length - 1]?.url || arr[arr.length - 1]?.link || arr[0]?.url || arr[0]?.link || '';
+  // 2. Upgrade resolution in saavncdn URL
+  if (typeof url === 'string' && url.includes('saavncdn.com')) {
+    url = url.replace(/-(?:50x50|150x150)\.(jpg|webp|png)/i, '-500x500.$1');
+  }
+  return url;
 }
 
-function bestStream(arr) {
+export function bestStream(arr) {
+  if (!arr) return '';
+  if (typeof arr === 'string') return arr;
   if (!Array.isArray(arr) || !arr.length) return '';
-  return arr[arr.length - 1]?.url || arr[0]?.url || '';
+  // 1. Look for 320kbps stream
+  const highQ = arr.find(s => s?.quality === '320kbps' || String(s?.quality).includes('320'));
+  return highQ?.url || highQ?.link || arr[arr.length - 1]?.url || arr[arr.length - 1]?.link || arr[0]?.url || arr[0]?.link || '';
 }
 
 function artistStr(artists) {
   if (!artists) return 'Unknown Artist';
+  if (typeof artists === 'string') return artists;
   const primary = artists.primary || artists.all || [];
   return primary.length
-    ? primary.map(a => a.name).join(', ')
+    ? primary.map(a => a.name || a).join(', ')
     : (artists.name || 'Unknown Artist');
 }
 
 export function normalizeSong(s) {
+  if (!s) return null;
+  // Normalize stream
+  let stream = bestStream(s.downloadUrl) || s.media_preview_url || s.vlink || s.previewUrl || '';
+  if (typeof stream === 'string' && stream.includes('_96_p.mp4')) {
+    stream = stream.replace('_96_p.mp4', '_320.mp4');
+  }
+
   return {
-    id:        s.id       || '',
-    title:     s.name     || s.title || 'Unknown',
-    artist:    artistStr(s.artists),
-    album:     s.album?.name || '',
-    thumbnail: bestImage(s.image),
-    streamUrl: bestStream(s.downloadUrl),
-    duration:  Number(s.duration) || 0,
+    id:        String(s.id || s.trackId || Math.random().toString(36).slice(2)),
+    title:     s.name || s.title || s.song || s.trackName || 'Unknown Title',
+    artist:    artistStr(s.artists || s.primary_artists || s.singers || s.artistName),
+    album:     s.album?.name || s.album || s.collectionName || '',
+    thumbnail: bestImage(s.image || s.artworkUrl100 || s.thumbnail),
+    streamUrl: stream,
+    duration:  Number(s.duration || s.trackTimeMillis ? Math.round((s.trackTimeMillis || 0)/1000) : 0),
     language:  s.language || '',
-    year:      s.year     || '',
-    hasLyrics: s.hasLyrics || false,
-    explicit:  s.explicitContent || false,
+    year:      s.year || (s.releaseDate ? s.releaseDate.slice(0, 4) : ''),
+    hasLyrics: Boolean(s.hasLyrics || s.has_lyrics),
+    explicit:  Boolean(s.explicitContent || s.explicit_content),
     type:      'song',
   };
 }
 
 function normalizeAlbum(a) {
+  if (!a) return null;
   return {
-    id:        a.id   || '',
-    title:     a.name || 'Unknown Album',
-    artist:    artistStr(a.artists),
+    id:        String(a.id || a.albumid || ''),
+    title:     a.name || a.title || 'Unknown Album',
+    artist:    artistStr(a.artists || a.primary_artists || a.music),
     thumbnail: bestImage(a.image),
-    year:      a.year      || '',
-    songCount: a.songCount || 0,
+    year:      a.year || (a.release_date ? a.release_date.slice(0, 4) : ''),
+    songCount: Number(a.songCount || a.songs?.length || 0),
     type:      'album',
   };
 }
 
 function normalizeArtist(a) {
+  if (!a) return null;
   return {
-    id:        a.id   || '',
-    title:     a.name || 'Unknown Artist',
+    id:        String(a.id || ''),
+    title:     a.name || a.title || 'Unknown Artist',
     thumbnail: bestImage(a.image),
-    followerCount: a.followerCount || 0,
+    followerCount: Number(a.followerCount || 0),
     type:      'artist',
   };
 }
 
 function normalizePlaylist(p) {
+  if (!p) return null;
   return {
-    id:        p.id   || '',
-    title:     p.name || 'Unknown Playlist',
+    id:        String(p.id || ''),
+    title:     p.name || p.title || 'Unknown Playlist',
     thumbnail: bestImage(p.image),
-    songCount: p.songCount || 0,
+    songCount: Number(p.songCount || 0),
     type:      'playlist',
   };
 }
 
-async function apiFetch(url) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error(`Saavn API ${res.status}: ${url}`);
-  return res.json();
+// ── Multi-Tier Fetcher ───────────────────────────────────────────────
+
+/**
+ * Attempts Saavn endpoints with multiple proxies.
+ */
+async function saavnApiFetch(endpoint) {
+  const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const directUrl = `https://saavn.dev/api${clean}`;
+
+  const candidates = [
+    `/api/saavn${clean}`,
+    directUrl,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(directUrl)}`,
+  ];
+
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && (json.data !== undefined || json.status === 'SUCCESS' || json.status === 'success')) {
+          return json;
+        }
+      }
+    } catch {
+      // Continue to next candidate
+    }
+  }
+
+  throw new Error(`saavn.dev unreachable on ${endpoint}`);
 }
 
-// ── Search ────────────────────────────────────────────────────────────
+// ── Search Implementations ───────────────────────────────────────────
 
 export async function searchAll(query) {
-  if (!query.trim()) return { songs: [], albums: [], artists: [], playlists: [] };
-  const json = await apiFetch(`${BASE}/search/all?query=${encodeURIComponent(query)}`);
-  const d = json.data || {};
-  return {
-    songs:     (d.songs?.results     || []).map(normalizeSong),
-    albums:    (d.albums?.results    || []).map(normalizeAlbum),
-    artists:   (d.artists?.results   || []).map(normalizeArtist),
-    playlists: (d.playlists?.results || []).map(normalizePlaylist),
-  };
+  if (!query || !query.trim()) {
+    return { songs: [], albums: [], artists: [], playlists: [] };
+  }
+
+  // Tier 1: Try saavn.dev
+  try {
+    const json = await saavnApiFetch(`/search/all?query=${encodeURIComponent(query)}`);
+    const d = json.data || {};
+    return {
+      songs:     (d.songs?.results     || []).map(normalizeSong).filter(Boolean),
+      albums:    (d.albums?.results    || []).map(normalizeAlbum).filter(Boolean),
+      artists:   (d.artists?.results   || []).map(normalizeArtist).filter(Boolean),
+      playlists: (d.playlists?.results || []).map(normalizePlaylist).filter(Boolean),
+    };
+  } catch {
+    // Tier 2: JioSaavn Direct Autocomplete
+    try {
+      const jioRes = await fetch(`https://www.jiosaavn.com/api.php?__call=autocomplete.get&_marker=0&query=${encodeURIComponent(query)}&ctx=android&_format=json`, { signal: AbortSignal.timeout(5000) });
+      if (jioRes.ok) {
+        const d = await jioRes.json();
+        return {
+          songs:     (d.songs?.data     || []).map(s => normalizeSong({
+            id: s.id,
+            title: s.title,
+            album: s.album,
+            artists: s.more_info?.primary_artists || s.description,
+            image: s.image,
+            media_preview_url: s.more_info?.vlink,
+          })).filter(Boolean),
+          albums:    (d.albums?.data    || []).map(a => normalizeAlbum({
+            id: a.id,
+            title: a.title,
+            artists: a.music || a.description,
+            image: a.image,
+            year: a.more_info?.year,
+          })).filter(Boolean),
+          artists:   (d.artists?.data   || []).map(normalizeArtist).filter(Boolean),
+          playlists: (d.playlists?.data || []).map(normalizePlaylist).filter(Boolean),
+        };
+      }
+    } catch {}
+
+    // Tier 3: iTunes Search
+    try {
+      const itunesRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=15`, { signal: AbortSignal.timeout(5000) });
+      if (itunesRes.ok) {
+        const data = await itunesRes.json();
+        const songs = (data.results || []).map(s => normalizeSong({
+          id: String(s.trackId),
+          name: s.trackName,
+          artists: s.artistName,
+          album: { name: s.collectionName },
+          image: [{ quality: '500x500', url: s.artworkUrl100?.replace('100x100bb.jpg', '600x600bb.jpg') }],
+          downloadUrl: [{ quality: '320kbps', url: s.previewUrl }],
+          duration: Math.round((s.trackTimeMillis || 0) / 1000),
+          year: s.releaseDate ? s.releaseDate.slice(0, 4) : '',
+        })).filter(Boolean);
+
+        return { songs, albums: [], artists: [], playlists: [] };
+      }
+    } catch {}
+
+    return { songs: [], albums: [], artists: [], playlists: [] };
+  }
 }
 
 export async function searchSongs(query, limit = 20) {
-  if (!query.trim()) return [];
-  const json = await apiFetch(`${BASE}/search/songs?query=${encodeURIComponent(query)}&limit=${limit}`);
-  return (json.data?.results || []).map(normalizeSong);
+  if (!query || !query.trim()) return [];
+
+  // Tier 1: saavn.dev
+  try {
+    const json = await saavnApiFetch(`/search/songs?query=${encodeURIComponent(query)}&limit=${limit}`);
+    return (json.data?.results || []).map(normalizeSong).filter(Boolean);
+  } catch {
+    // Tier 2: JioSaavn Direct
+    try {
+      const res = await fetch(`https://www.jiosaavn.com/api.php?__call=search.getResults&_marker=0&q=${encodeURIComponent(query)}&ctx=android&_format=json&p=1&n=${limit}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.results && d.results.length) {
+          return d.results.map(s => normalizeSong({
+            id: s.id,
+            title: s.song,
+            album: s.album,
+            artists: s.primary_artists || s.singers,
+            image: s.image,
+            media_preview_url: s.media_preview_url || s.vlink,
+            duration: Number(s.duration) || 0,
+            year: s.year,
+          })).filter(Boolean);
+        }
+      }
+    } catch {}
+
+    // Tier 3: iTunes
+    try {
+      const itunesRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=${limit}`, { signal: AbortSignal.timeout(5000) });
+      if (itunesRes.ok) {
+        const data = await itunesRes.json();
+        return (data.results || []).map(s => normalizeSong({
+          id: String(s.trackId),
+          name: s.trackName,
+          artists: s.artistName,
+          album: { name: s.collectionName },
+          image: [{ quality: '500x500', url: s.artworkUrl100?.replace('100x100bb.jpg', '600x600bb.jpg') }],
+          downloadUrl: [{ quality: '320kbps', url: s.previewUrl }],
+          duration: Math.round((s.trackTimeMillis || 0) / 1000),
+          year: s.releaseDate ? s.releaseDate.slice(0, 4) : '',
+        })).filter(Boolean);
+      }
+    } catch {}
+
+    return [];
+  }
 }
 
 export async function searchAlbums(query, limit = 20) {
-  if (!query.trim()) return [];
-  const json = await apiFetch(`${BASE}/search/albums?query=${encodeURIComponent(query)}&limit=${limit}`);
-  return (json.data?.results || []).map(normalizeAlbum);
+  if (!query || !query.trim()) return [];
+
+  try {
+    const json = await saavnApiFetch(`/search/albums?query=${encodeURIComponent(query)}&limit=${limit}`);
+    return (json.data?.results || []).map(normalizeAlbum).filter(Boolean);
+  } catch {
+    try {
+      const res = await fetch(`https://www.jiosaavn.com/api.php?__call=search.getAlbumResults&_marker=0&q=${encodeURIComponent(query)}&ctx=android&_format=json&p=1&n=${limit}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const d = await res.json();
+        return (d.results || []).map(normalizeAlbum).filter(Boolean);
+      }
+    } catch {}
+    return [];
+  }
 }
 
 export async function searchArtists(query, limit = 20) {
-  if (!query.trim()) return [];
-  const json = await apiFetch(`${BASE}/search/artists?query=${encodeURIComponent(query)}&limit=${limit}`);
-  return (json.data?.results || []).map(normalizeArtist);
+  if (!query || !query.trim()) return [];
+
+  try {
+    const json = await saavnApiFetch(`/search/artists?query=${encodeURIComponent(query)}&limit=${limit}`);
+    return (json.data?.results || []).map(normalizeArtist).filter(Boolean);
+  } catch {
+    try {
+      const res = await fetch(`https://www.jiosaavn.com/api.php?__call=search.getArtistResults&_marker=0&q=${encodeURIComponent(query)}&ctx=android&_format=json&p=1&n=${limit}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const d = await res.json();
+        return (d.results || []).map(normalizeArtist).filter(Boolean);
+      }
+    } catch {}
+    return [];
+  }
 }
 
 export async function searchPlaylists(query, limit = 20) {
-  if (!query.trim()) return [];
-  const json = await apiFetch(`${BASE}/search/playlists?query=${encodeURIComponent(query)}&limit=${limit}`);
-  return (json.data?.results || []).map(normalizePlaylist);
+  if (!query || !query.trim()) return [];
+
+  try {
+    const json = await saavnApiFetch(`/search/playlists?query=${encodeURIComponent(query)}&limit=${limit}`);
+    return (json.data?.results || []).map(normalizePlaylist).filter(Boolean);
+  } catch {
+    try {
+      const res = await fetch(`https://www.jiosaavn.com/api.php?__call=autocomplete.get&_marker=0&query=${encodeURIComponent(query)}&ctx=android&_format=json`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const d = await res.json();
+        return (d.playlists?.data || []).map(normalizePlaylist).filter(Boolean);
+      }
+    } catch {}
+    return [];
+  }
 }
 
-// ── Detail fetchers ───────────────────────────────────────────────────
+// ── Detail Fetchers ──────────────────────────────────────────────────
 
-/** Full song detail by ID — includes downloadUrl */
 export async function getSongById(id) {
-  const json = await apiFetch(`${BASE}/songs/${id}`);
-  const arr  = json.data || [];
-  if (!arr.length) throw new Error('No song data');
-  return normalizeSong(arr[0]);
-}
-
-/** All songs in an album */
-export async function getAlbumSongs(albumId) {
-  const json = await apiFetch(`${BASE}/albums?id=${albumId}`);
-  const d    = json.data || {};
-  const songs = (d.songs || []).map(normalizeSong);
-  return {
-    id:        d.id   || albumId,
-    title:     d.name || 'Unknown Album',
-    artist:    artistStr(d.artists),
-    thumbnail: bestImage(d.image),
-    year:      d.year || '',
-    songs,
-  };
-}
-
-/** Top tracks for an artist */
-export async function getArtistSongs(artistId) {
-  const json = await apiFetch(`${BASE}/artists/${artistId}/songs`);
-  const d    = json.data || {};
-  const songs = (d.songs?.results || d.results || []).map(normalizeSong);
-  return {
-    id:        d.id   || artistId,
-    title:     d.name || 'Unknown Artist',
-    thumbnail: bestImage(d.image),
-    songs,
-  };
-}
-
-/** All songs in a playlist */
-export async function getPlaylistSongs(playlistId) {
-  const json = await apiFetch(`${BASE}/playlists?id=${playlistId}`);
-  const d    = json.data || {};
-  const songs = (d.songs || []).map(normalizeSong);
-  return {
-    id:        d.id   || playlistId,
-    title:     d.name || 'Unknown Playlist',
-    thumbnail: bestImage(d.image),
-    songs,
-  };
-}
-
-// ── Lyrics ────────────────────────────────────────────────────────────
-
-/**
- * Fetch lyrics for a song.
- * Returns { lrc, source: 'synced'|'plain'|'demo' }
- */
-export async function fetchSongLyrics(id, title, artist) {
-  // 1. Saavn lyrics endpoint
   try {
-    const json = await apiFetch(`${BASE}/songs/${id}/lyrics`);
-    const raw  = json.data?.lyrics || '';
-    if (raw.trim()) {
-      const lines = raw.split('\n').filter(l => l.trim());
-      const lrc   = lines.map((line, i) => {
-        const t  = i * 5;
-        const mm = String(Math.floor(t / 60)).padStart(2, '0');
-        const ss = String(t % 60).padStart(2, '0');
-        return `[${mm}:${ss}.00] ${line}`;
-      }).join('\n');
-      return { lrc, source: 'plain' };
+    const json = await saavnApiFetch(`/songs/${id}`);
+    const arr  = json.data || [];
+    if (arr.length) return normalizeSong(arr[0]);
+  } catch {}
+
+  // Fallback to JioSaavn song details
+  try {
+    const res = await fetch(`https://www.jiosaavn.com/api.php?__call=song.getDetails&pids=${id}&_format=json`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      const s = data[id] || Object.values(data)[0];
+      if (s) {
+        return normalizeSong({
+          id: s.id,
+          title: s.song,
+          album: s.album,
+          artists: s.primary_artists,
+          image: s.image,
+          media_preview_url: s.media_preview_url || s.vlink,
+          duration: s.duration,
+          year: s.year,
+        });
+      }
     }
-  } catch (_) {}
+  } catch {}
 
-  // 2. lrclib.net (synced LRC)
+  throw new Error(`Song details not found for id: ${id}`);
+}
+
+export async function getAlbumSongs(albumId) {
   try {
-    const params = new URLSearchParams({ track_name: title, artist_name: artist });
-    const res    = await fetch(`https://lrclib.net/api/search?${params}`,
-      { signal: AbortSignal.timeout(8000) });
+    const json = await saavnApiFetch(`/albums?id=${albumId}`);
+    const d = json.data || {};
+    return {
+      id:        d.id || albumId,
+      title:     d.name || 'Album',
+      artist:    artistStr(d.artists),
+      thumbnail: bestImage(d.image),
+      year:      d.year || '',
+      songs:     (d.songs || []).map(normalizeSong).filter(Boolean),
+    };
+  } catch {}
+
+  // Fallback JioSaavn
+  try {
+    const res = await fetch(`https://www.jiosaavn.com/api.php?__call=content.getAlbumDetails&albumid=${albumId}&_format=json&ctx=android`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const d = await res.json();
+      return {
+        id:        d.albumid || albumId,
+        title:     d.title || d.name || 'Album',
+        artist:    d.primary_artists || 'Various Artists',
+        thumbnail: bestImage(d.image),
+        year:      d.year || '',
+        songs:     (d.songs || []).map(s => normalizeSong({
+          id: s.id,
+          title: s.song,
+          album: s.album,
+          artists: s.primary_artists,
+          image: s.image,
+          media_preview_url: s.media_preview_url || s.vlink,
+          duration: s.duration,
+          year: s.year,
+        })).filter(Boolean),
+      };
+    }
+  } catch {}
+
+  return { id: albumId, title: 'Album', artist: '', thumbnail: '', year: '', songs: [] };
+}
+
+export async function getArtistSongs(artistId) {
+  try {
+    const json = await saavnApiFetch(`/artists/${artistId}/songs`);
+    const d = json.data || {};
+    return {
+      id:        d.id || artistId,
+      title:     d.name || 'Artist',
+      thumbnail: bestImage(d.image),
+      songs:     (d.songs?.results || d.results || []).map(normalizeSong).filter(Boolean),
+    };
+  } catch {}
+
+  return { id: artistId, title: 'Artist', thumbnail: '', songs: [] };
+}
+
+export async function getPlaylistSongs(playlistId) {
+  try {
+    const json = await saavnApiFetch(`/playlists?id=${playlistId}`);
+    const d = json.data || {};
+    return {
+      id:        d.id || playlistId,
+      title:     d.name || 'Playlist',
+      thumbnail: bestImage(d.image),
+      songs:     (d.songs || []).map(normalizeSong).filter(Boolean),
+    };
+  } catch {}
+
+  return { id: playlistId, title: 'Playlist', thumbnail: '', songs: [] };
+}
+
+// ── Synced Lyrics Synchronization ────────────────────────────────────
+
+export async function fetchSongLyrics(id, title, artist) {
+  // 1. lrclib.net (Full millisecond synced LRC format)
+  try {
+    const cleanTitle = (title || '').replace(/\(.*\)|\[.*\]/g, '').trim();
+    const cleanArtist = (artist || '').split(/[,&]/)[0].trim();
+    const params = new URLSearchParams({ track_name: cleanTitle, artist_name: cleanArtist });
+    const res = await fetch(`https://lrclib.net/api/search?${params}`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const results = await res.json();
-      if (results.length) {
+      if (Array.isArray(results) && results.length) {
         const m = results.find(r =>
-          r.trackName?.toLowerCase().includes(title.toLowerCase())
+          r.trackName?.toLowerCase().includes(cleanTitle.toLowerCase())
         ) || results[0];
-        if (m.syncedLyrics) return { lrc: m.syncedLyrics, source: 'synced' };
+        if (m.syncedLyrics) {
+          return { lrc: m.syncedLyrics, source: 'synced' };
+        }
         if (m.plainLyrics) {
           const lrc = m.plainLyrics.split('\n').filter(Boolean)
             .map((line, i) => {
-              const t  = i * 5;
+              const t  = i * 4.5;
               const mm = String(Math.floor(t / 60)).padStart(2, '0');
-              const ss = String(t % 60).padStart(2, '0');
-              return `[${mm}:${ss}.00] ${line}`;
+              const ss = String(Math.floor(t % 60)).padStart(2, '0');
+              const ms = String(Math.floor((t % 1) * 100)).padStart(2, '0');
+              return `[${mm}:${ss}.${ms}] ${line.trim()}`;
             }).join('\n');
           return { lrc, source: 'plain' };
         }
       }
     }
-  } catch (_) {}
+  } catch {}
+
+  // 2. Saavn lyrics endpoint
+  try {
+    const json = await saavnApiFetch(`/songs/${id}/lyrics`);
+    const raw  = json.data?.lyrics || json.lyrics || '';
+    if (raw && typeof raw === 'string' && raw.trim()) {
+      if (/\[\d{1,3}:\d{2}/.test(raw)) {
+        return { lrc: raw, source: 'synced' };
+      }
+      const lines = raw.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+      const lrc = lines.map((line, i) => {
+        const t  = i * 4;
+        const mm = String(Math.floor(t / 60)).padStart(2, '0');
+        const ss = String(Math.floor(t % 60)).padStart(2, '0');
+        return `[${mm}:${ss}.00] ${line}`;
+      }).join('\n');
+      return { lrc, source: 'plain' };
+    }
+  } catch {}
 
   return { lrc: DEMO_LRC, source: 'demo' };
 }

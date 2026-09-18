@@ -1,17 +1,19 @@
 /**
- * useLibrary.js — Local playlist & liked-tracks engine
+ * useLibrary.js — Local playlist, liked-tracks & custom albums engine
  *
- * Persists to localStorage. Provides CRUD for:
- *   - Liked tracks
- *   - User-created playlists (with songs)
- *   - Queue (current session)
+ * Persists to localStorage:
+ *   - likedSongs (Liked tracks array)
+ *   - pulse_playlists (User-created playlists)
+ *   - pulse_custom_albums (User-defined custom albums)
  */
 
 import { useState, useCallback, useEffect } from 'react';
 
 const STORAGE_KEYS = {
-  liked:     'pulse_liked_songs',
+  liked:     'likedSongs',
+  legacyLiked: 'pulse_liked_songs',
   playlists: 'pulse_playlists',
+  albums:    'pulse_custom_albums',
 };
 
 function load(key, fallback) {
@@ -28,23 +30,41 @@ function save(key, value) {
 }
 
 export function useLibrary() {
-  const [liked,     setLiked]     = useState(() => load(STORAGE_KEYS.liked,     []));
+  const [liked, setLiked] = useState(() => {
+    // Check 'likedSongs' first, then legacy 'pulse_liked_songs'
+    const stored = load(STORAGE_KEYS.liked, null);
+    if (stored !== null && Array.isArray(stored)) return stored;
+    return load(STORAGE_KEYS.legacyLiked, []);
+  });
+
   const [playlists, setPlaylists] = useState(() => load(STORAGE_KEYS.playlists, []));
+  const [customAlbums, setCustomAlbums] = useState(() => load(STORAGE_KEYS.albums, []));
 
   // Sync to localStorage on change
-  useEffect(() => { save(STORAGE_KEYS.liked,     liked);     }, [liked]);
-  useEffect(() => { save(STORAGE_KEYS.playlists, playlists); }, [playlists]);
+  useEffect(() => {
+    save(STORAGE_KEYS.liked, liked);
+    save(STORAGE_KEYS.legacyLiked, liked);
+  }, [liked]);
+
+  useEffect(() => {
+    save(STORAGE_KEYS.playlists, playlists);
+  }, [playlists]);
+
+  useEffect(() => {
+    save(STORAGE_KEYS.albums, customAlbums);
+  }, [customAlbums]);
 
   // ── Liked tracks ──────────────────────────────────────────────────
 
   const isLiked = useCallback((id) =>
-    liked.some(s => s.id === id), [liked]);
+    liked.some(s => String(s.id) === String(id)), [liked]);
 
   const toggleLike = useCallback((song) => {
+    if (!song) return;
     setLiked(prev =>
-      prev.some(s => s.id === song.id)
-        ? prev.filter(s => s.id !== song.id)
-        : [song, ...prev]
+      prev.some(s => String(s.id) === String(song.id))
+        ? prev.filter(s => String(s.id) !== String(song.id))
+        : [{ ...song }, ...prev]
     );
   }, []);
 
@@ -59,6 +79,7 @@ export function useLibrary() {
       createdAt:   Date.now(),
       songs:       [],
       thumbnail:   '',
+      type:        'playlist',
     };
     setPlaylists(prev => [playlist, ...prev]);
     return playlist.id;
@@ -72,39 +93,113 @@ export function useLibrary() {
   /** Rename a playlist */
   const renamePlaylist = useCallback((playlistId, newTitle) => {
     setPlaylists(prev => prev.map(p =>
-      p.id === playlistId ? { ...p, title: newTitle } : p
+      p.id === playlistId ? { ...p, title: newTitle.trim() || p.title } : p
     ));
   }, []);
 
   /** Add a song to a playlist (dedup by song id) */
   const addToPlaylist = useCallback((playlistId, song) => {
+    if (!song) return;
     setPlaylists(prev => prev.map(p => {
       if (p.id !== playlistId) return p;
-      if (p.songs.some(s => s.id === song.id)) return p; // already in
+      if (p.songs.some(s => String(s.id) === String(song.id))) return p; // already in
       const thumbnail = p.thumbnail || song.thumbnail;
-      return { ...p, songs: [...p.songs, song], thumbnail };
+      return { ...p, songs: [...p.songs, { ...song }], thumbnail };
     }));
   }, []);
 
   /** Remove a song from a playlist */
   const removeFromPlaylist = useCallback((playlistId, songId) => {
-    setPlaylists(prev => prev.map(p =>
-      p.id !== playlistId ? p : {
+    setPlaylists(prev => prev.map(p => {
+      if (p.id !== playlistId) return p;
+      const updated = p.songs.filter(s => String(s.id) !== String(songId));
+      return {
         ...p,
-        songs: p.songs.filter(s => s.id !== songId),
-        thumbnail: p.songs.filter(s => s.id !== songId)[0]?.thumbnail || p.thumbnail,
-      }
-    ));
+        songs: updated,
+        thumbnail: updated[0]?.thumbnail || '',
+      };
+    }));
   }, []);
 
   /** Get a single playlist by id */
   const getPlaylist = useCallback((id) =>
     playlists.find(p => p.id === id) || null, [playlists]);
 
+  // ── Custom Albums ─────────────────────────────────────────────────
+
+  /** Create a user-defined custom album */
+  const createAlbum = useCallback((title, artist = 'Various Artists', description = '') => {
+    const album = {
+      id:          `album_${Date.now()}`,
+      title:       title.trim() || 'Custom Album',
+      artist:      artist.trim() || 'Custom Curator',
+      description: description.trim(),
+      year:        new Date().getFullYear().toString(),
+      createdAt:   Date.now(),
+      songs:       [],
+      thumbnail:   '',
+      type:        'album',
+    };
+    setCustomAlbums(prev => [album, ...prev]);
+    return album.id;
+  }, []);
+
+  /** Delete a custom album by id */
+  const deleteAlbum = useCallback((albumId) => {
+    setCustomAlbums(prev => prev.filter(a => a.id !== albumId));
+  }, []);
+
+  /** Rename/edit a custom album */
+  const renameAlbum = useCallback((albumId, newTitle, newArtist) => {
+    setCustomAlbums(prev => prev.map(a =>
+      a.id === albumId
+        ? { ...a, title: newTitle.trim() || a.title, artist: newArtist ? newArtist.trim() : a.artist }
+        : a
+    ));
+  }, []);
+
+  /** Add a song to a custom album */
+  const addToAlbum = useCallback((albumId, song) => {
+    if (!song) return;
+    setCustomAlbums(prev => prev.map(a => {
+      if (a.id !== albumId) return a;
+      if (a.songs.some(s => String(s.id) === String(song.id))) return a;
+      const thumbnail = a.thumbnail || song.thumbnail;
+      return { ...a, songs: [...a.songs, { ...song }], thumbnail };
+    }));
+  }, []);
+
+  /** Remove a song from a custom album */
+  const removeFromAlbum = useCallback((albumId, songId) => {
+    setCustomAlbums(prev => prev.map(a => {
+      if (a.id !== albumId) return a;
+      const updated = a.songs.filter(s => String(s.id) !== String(songId));
+      return {
+        ...a,
+        songs: updated,
+        thumbnail: updated[0]?.thumbnail || '',
+      };
+    }));
+  }, []);
+
   return {
-    liked, playlists,
-    isLiked, toggleLike,
-    createPlaylist, deletePlaylist, renamePlaylist,
-    addToPlaylist, removeFromPlaylist, getPlaylist,
+    liked,
+    playlists,
+    customAlbums,
+    isLiked,
+    toggleLike,
+    // Playlists
+    createPlaylist,
+    deletePlaylist,
+    renamePlaylist,
+    addToPlaylist,
+    removeFromPlaylist,
+    getPlaylist,
+    // Albums
+    createAlbum,
+    deleteAlbum,
+    renameAlbum,
+    addToAlbum,
+    removeFromAlbum,
   };
 }

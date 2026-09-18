@@ -67,7 +67,7 @@ export default function HomeView() {
   const renderResults = () => {
     if (!results) return null;
     if (loading) return <SearchSkeleton />;
-    if (error)   return <ErrorMsg msg={error} />;
+    if (error)   return <ErrorMsg msg={error} onRetry={() => search(query)} />;
 
     if (activeTab === 'all') {
       const { songs = [], albums = [], artists = [], playlists = [] } = results;
@@ -274,12 +274,17 @@ function SearchSkeleton() {
   );
 }
 
-function ErrorMsg({ msg }) {
+function ErrorMsg({ msg, onRetry }) {
   return (
-    <div className="flex flex-col items-center gap-2 py-16 text-center">
-      <span className="material-symbols-outlined text-[48px] text-on-surface-variant">error_outline</span>
-      <p className="text-headline-sm text-on-surface-variant">Search failed</p>
-      <p className="text-body-md text-outline">{msg}</p>
+    <div className="flex flex-col items-center gap-3 py-16 text-center">
+      <span className="material-symbols-outlined text-[48px] text-brand-pink/60">cloud_off</span>
+      <p className="text-headline-sm text-white font-semibold">Search encountered an issue</p>
+      <p className="text-body-md text-outline max-w-md">{msg || 'Unable to reach music endpoints. Please try again.'}</p>
+      {onRetry && (
+        <button onClick={onRetry} className="px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-medium text-label-md transition-colors mt-2">
+          Retry Search
+        </button>
+      )}
     </div>
   );
 }
@@ -288,8 +293,8 @@ function NoResults({ query }) {
   return (
     <div className="flex flex-col items-center gap-2 py-16 text-center">
       <span className="material-symbols-outlined text-[48px] text-on-surface-variant">search_off</span>
-      <p className="text-headline-sm text-on-surface-variant">No results for "{query}"</p>
-      <p className="text-body-md text-outline">Try a different search term</p>
+      <p className="text-headline-sm text-on-surface-variant">No results found for "{query}"</p>
+      <p className="text-body-md text-outline">Try searching for a song title, artist, or album</p>
     </div>
   );
 }
@@ -353,7 +358,7 @@ function HomeDefault({ onPlaySong }) {
 }
 
 function NowPlayingHero() {
-  const { currentSong, isPlaying, togglePlay } = usePlayer();
+  const { currentSong, isPlaying, togglePlay, isLiked, toggleLike } = usePlayer();
   if (!currentSong) return (
     <div className="w-full h-36 rounded-2xl glass-card border border-white/5 flex items-center justify-center gap-4">
       <span className="material-symbols-outlined text-[48px] text-white/10">music_note</span>
@@ -363,6 +368,9 @@ function NowPlayingHero() {
       </div>
     </div>
   );
+
+  const liked = isLiked(currentSong.id);
+
   return (
     <div className="w-full rounded-2xl glass-card border border-white/5 p-4 flex items-center gap-4">
       <div className={`w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 ${isPlaying ? 'ring-2 ring-brand-violet' : ''}`}>
@@ -373,8 +381,21 @@ function NowPlayingHero() {
         <h2 className="text-headline-sm font-bold text-white truncate">{currentSong.title}</h2>
         <p className="text-body-md text-on-surface-variant">{currentSong.artist}</p>
       </div>
-      <button onClick={togglePlay}
-        className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-lg flex-shrink-0">
+      <button
+        onClick={() => toggleLike(currentSong)}
+        className={`p-2 rounded-full transition-transform active:scale-90 ${
+          liked ? 'text-brand-pink' : 'text-on-surface-variant hover:text-brand-pink'
+        }`}
+        title={liked ? 'Unlike' : 'Like'}
+      >
+        <span className="material-symbols-outlined text-[24px]" style={{fontVariationSettings:`'FILL' ${liked ? 1 : 0}`}}>
+          favorite
+        </span>
+      </button>
+      <button
+        onClick={togglePlay}
+        className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-lg flex-shrink-0"
+      >
         <span className="material-symbols-outlined text-[24px] text-black" style={{fontVariationSettings:"'FILL' 1"}}>
           {isPlaying ? 'pause' : 'play_arrow'}
         </span>

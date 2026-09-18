@@ -30,7 +30,8 @@ function AppShell() {
         <div key={view} className="h-full w-full animate-fade-in">
           {view === 'home'    && <HomeView />}
           {view === 'lyrics'  && <LyricsView />}
-          {view === 'library' && <LibraryView />}
+          {view === 'library' && <LibraryView initialSection="playlists" />}
+          {view === 'liked'   && <LibraryView initialSection="liked" />}
         </div>
       </div>
 
