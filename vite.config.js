@@ -151,6 +151,119 @@ function innertubeApiPlugin() {
           }
         }
 
+        // ── 4. POST /api/sync/test ───────────────────────────────────────
+        if (pathname === '/api/sync/test' && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', async () => {
+            try {
+              const { mode, sapisid, accessToken } = JSON.parse(body || '{}');
+              const headers = {
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+                'Referer': 'https://music.youtube.com/',
+                'Origin': 'https://music.youtube.com',
+                'X-YouTube-Client-Name': '67',
+                'X-YouTube-Client-Version': '1.20250101.01.00',
+              };
+
+              if (mode === 'oauth' && accessToken) {
+                headers['Authorization'] = `Bearer ${accessToken}`;
+              } else if (mode === 'sapisid' && sapisid) {
+                headers['Cookie'] = `SAPISID=${sapisid}; __Secure-3PAPISID=${sapisid};`;
+              }
+
+              const ytRes = await fetch('https://music.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  context: {
+                    client: {
+                      clientName: 'WEB_REMIX',
+                      clientVersion: '1.20250101.01.00',
+                      hl: 'en',
+                      gl: 'US',
+                    },
+                  },
+                  browseId: 'FEmusic_liked',
+                }),
+              });
+
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+
+              if (ytRes.ok) {
+                const data = await ytRes.json();
+                res.statusCode = 200;
+                res.end(JSON.stringify({
+                  success: true,
+                  status: 'connected',
+                  accountName: data.header?.musicHeaderRenderer?.title?.runs?.[0]?.text || 'YouTube Music Account',
+                }));
+              } else {
+                res.statusCode = ytRes.status === 401 || ytRes.status === 403 ? 401 : ytRes.status;
+                res.end(JSON.stringify({
+                  success: false,
+                  status: ytRes.status,
+                  message: `YouTube API returned ${ytRes.status} (Authentication required or token expired)`,
+                }));
+              }
+            } catch (err) {
+              console.error('[API /api/sync/test] Error:', err);
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, message: err.message }));
+            }
+          });
+          return;
+        }
+
+        // ── 5. Proxy /youtubei/v1/* ────────────────────────────────────────
+        if (pathname.startsWith('/youtubei/v1/')) {
+          try {
+            const targetUrl = `https://music.youtube.com${pathname}${parsedUrl.search}`;
+            const fwdHeaders = {
+              'Content-Type': req.headers['content-type'] || 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+              'Referer': 'https://music.youtube.com/',
+              'Origin': 'https://music.youtube.com',
+              'X-YouTube-Client-Name': '67',
+              'X-YouTube-Client-Version': '1.20250101.01.00',
+            };
+
+            if (req.headers['authorization']) fwdHeaders['Authorization'] = req.headers['authorization'];
+            if (req.headers['cookie']) fwdHeaders['Cookie'] = req.headers['cookie'];
+
+            let body = null;
+            if (req.method === 'POST') {
+              body = await new Promise((resolve) => {
+                let data = '';
+                req.on('data', chunk => { data += chunk; });
+                req.on('end', () => resolve(data));
+              });
+            }
+
+            const proxyRes = await fetch(targetUrl, {
+              method: req.method,
+              headers: fwdHeaders,
+              body,
+            });
+
+            res.statusCode = proxyRes.status;
+            res.setHeader('Content-Type', proxyRes.headers.get('content-type') || 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            const data = await proxyRes.text();
+            res.end(data);
+            return;
+          } catch (err) {
+            console.error('[Proxy /youtubei/v1] Error:', err);
+            res.statusCode = 502;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: err.message }));
+            return;
+          }
+        }
+
         next();
       });
     },
@@ -178,6 +291,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api\/yt/, ''),
+      },
+      '/youtubei/v1': {
+        target: 'https://music.youtube.com',
+        changeOrigin: true,
+        secure: false,
       },
     },
   },

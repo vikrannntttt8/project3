@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { usePlayer } from '../../context/PlayerContext.jsx';
 import { formatDuration } from '../../utils/timeFormat.js';
+import AddToPlaylistMenu from '../shared/AddToPlaylistMenu.jsx';
 
 export default function ArtistView({ browseId, artistName }) {
-  const { navigateTo, goBack, loadSong, currentSong, isPlaying, togglePlay } = usePlayer();
+  const { navigateTo, goBack, loadSong, currentSong, isPlaying, togglePlay, isLiked, toggleLike } = usePlayer();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [expandedTopSongs, setExpandedTopSongs] = useState(false);
+  const [addMenuSong, setAddMenuSong] = useState(null);
 
   useEffect(() => {
     if (!browseId && !artistName) return;
@@ -14,6 +17,7 @@ export default function ArtistView({ browseId, artistName }) {
     let mounted = true;
     setLoading(true);
     setError(null);
+    setExpandedTopSongs(false);
 
     const fetchArtist = async () => {
       try {
@@ -56,24 +60,28 @@ export default function ArtistView({ browseId, artistName }) {
     loadSong(song, queue, idx);
   };
 
+  const visibleSongs = expandedTopSongs
+    ? (data?.topSongs || [])
+    : (data?.topSongs || []).slice(0, 5);
+
   return (
-    <div className="h-full w-full overflow-y-auto pb-32 pt-4 px-4 sm:px-8 space-y-8 scroll-smooth">
+    <div className="h-full w-full overflow-y-auto pb-36 pt-4 px-4 sm:px-8 space-y-8 scroll-smooth">
       {/* ── Top Bar Navigation ── */}
       <div className="flex items-center gap-4">
         <button
           onClick={goBack}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors text-label-md"
+          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors text-label-md"
         >
           <span className="material-symbols-outlined text-[20px]">arrow_back</span>
           <span>Back</span>
         </button>
-        <span className="text-body-sm text-outline">/ Artist Profile</span>
+        <span className="text-body-sm text-outline">/ Artist Discography</span>
       </div>
 
       {/* ── Loading Skeleton ── */}
       {loading && (
         <div className="space-y-6 animate-pulse">
-          <div className="h-64 rounded-2xl bg-white/5 flex items-center justify-center">
+          <div className="h-64 rounded-3xl bg-white/5 flex items-center justify-center">
             <div className="w-10 h-10 border-2 border-brand-violet border-t-transparent rounded-full animate-spin" />
           </div>
           <div className="space-y-3">
@@ -93,7 +101,7 @@ export default function ArtistView({ browseId, artistName }) {
             onClick={goBack}
             className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-label-md"
           >
-            Return to Home
+            Return to Previous View
           </button>
         </div>
       )}
@@ -116,7 +124,7 @@ export default function ArtistView({ browseId, artistName }) {
                 </div>
               )}
 
-              <div className="flex-1 text-center sm:text-left min-w-0 space-y-2">
+              <div className="flex-1 text-center sm:text-left min-w-0 space-y-2.5">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-violet/20 border border-brand-violet/40 text-brand-violet text-[11px] font-semibold uppercase tracking-wider">
                   <span className="material-symbols-outlined text-[14px]">verified</span>
                   Verified Artist
@@ -131,10 +139,10 @@ export default function ArtistView({ browseId, artistName }) {
                 )}
 
                 {data.topSongs && data.topSongs.length > 0 && (
-                  <div className="pt-3">
+                  <div className="pt-2 flex items-center justify-center sm:justify-start gap-3">
                     <button
                       onClick={() => handlePlaySong(data.topSongs[0], 0)}
-                      className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-brand-violet hover:bg-brand-violet/90 text-white font-semibold text-label-lg shadow-lg hover:shadow-brand-violet/25 transition-all"
+                      className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-brand-violet hover:bg-brand-violet/90 text-white font-semibold text-label-lg shadow-lg hover:shadow-brand-violet/25 hover:scale-105 active:scale-95 transition-all"
                     >
                       <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
                         play_arrow
@@ -147,7 +155,7 @@ export default function ArtistView({ browseId, artistName }) {
             </div>
           </div>
 
-          {/* Top Songs */}
+          {/* ── 1. Top Songs (Expandable) ── */}
           {data.topSongs && data.topSongs.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center justify-between">
@@ -155,12 +163,14 @@ export default function ArtistView({ browseId, artistName }) {
                   <span className="material-symbols-outlined text-brand-violet text-[22px]">bar_chart</span>
                   Top Songs
                 </h2>
-                <span className="text-body-sm text-outline">{data.topSongs.length} tracks</span>
+                <span className="text-body-sm text-outline">{data.topSongs.length} tracks available</span>
               </div>
 
               <div className="divide-y divide-neutral-800/80 rounded-2xl bg-white/[0.02] border border-white/5 overflow-hidden">
-                {data.topSongs.map((track, idx) => {
+                {visibleSongs.map((track, idx) => {
                   const isCurrent = currentSong?.videoId === track.videoId || currentSong?.id === track.id;
+                  const liked = isLiked(track.id);
+
                   return (
                     <div
                       key={track.id || idx}
@@ -197,17 +207,48 @@ export default function ArtistView({ browseId, artistName }) {
                           }`}>
                             {track.title}
                           </p>
-                          <p className="text-label-sm text-outline truncate">{track.artist}</p>
+                          <p className="text-label-sm text-outline truncate">
+                            {track.artist} {track.album ? `• ${track.album}` : ''}
+                          </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4 flex-shrink-0 ml-3">
+                      {/* Action buttons (Like + Add to playlist) */}
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleLike(track);
+                          }}
+                          className={`p-1.5 rounded-full transition-transform active:scale-90 ${
+                            liked ? 'text-brand-pink' : 'text-outline hover:text-brand-pink'
+                          }`}
+                          title={liked ? 'Unlike' : 'Like'}
+                        >
+                          <span className="material-symbols-outlined text-[19px]" style={{ fontVariationSettings: `'FILL' ${liked ? 1 : 0}` }}>
+                            favorite
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAddMenuSong(track);
+                          }}
+                          className="p-1.5 rounded-full text-outline hover:text-white transition-colors"
+                          title="Add to playlist"
+                        >
+                          <span className="material-symbols-outlined text-[19px]">playlist_add</span>
+                        </button>
+
                         {track.duration > 0 && (
-                          <span className="text-label-sm font-mono text-outline tabular-nums">
+                          <span className="text-label-sm font-mono text-outline tabular-nums ml-2 hidden sm:inline">
                             {formatDuration(track.duration)}
                           </span>
                         )}
-                        <span className="material-symbols-outlined text-[22px] text-white/50 group-hover:text-white transition-colors">
+                        <span className="material-symbols-outlined text-[22px] text-white/50 group-hover:text-white transition-colors ml-1">
                           play_circle
                         </span>
                       </div>
@@ -215,16 +256,34 @@ export default function ArtistView({ browseId, artistName }) {
                   );
                 })}
               </div>
+
+              {data.topSongs.length > 5 && (
+                <div className="flex justify-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedTopSongs(!expandedTopSongs)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-label-md font-medium text-white transition-colors"
+                  >
+                    <span>{expandedTopSongs ? 'Show Less' : `Show All (${data.topSongs.length} Songs)`}</span>
+                    <span className="material-symbols-outlined text-[18px]">
+                      {expandedTopSongs ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </button>
+                </div>
+              )}
             </section>
           )}
 
-          {/* Albums & Singles */}
+          {/* ── 2. Albums ── */}
           {data.albums && data.albums.length > 0 && (
             <section className="space-y-4">
-              <h2 className="text-headline-sm font-bold text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-brand-violet text-[22px]">album</span>
-                Albums & Discography
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-headline-sm font-bold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-violet text-[22px]">album</span>
+                  Albums
+                </h2>
+                <span className="text-body-sm text-outline">{data.albums.length} releases</span>
+              </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {data.albums.map((alb, i) => (
@@ -263,7 +322,209 @@ export default function ArtistView({ browseId, artistName }) {
               </div>
             </section>
           )}
+
+          {/* ── 3. Singles & EPs ── */}
+          {data.singles && data.singles.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-headline-sm font-bold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-cyan text-[22px]">disc_full</span>
+                  Singles & EPs
+                </h2>
+                <span className="text-body-sm text-outline">{data.singles.length} releases</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {data.singles.map((single, i) => (
+                  <div
+                    key={single.id || single.browseId || i}
+                    onClick={() => navigateTo('album', single.browseId || single.id, { title: single.title, artist: data.name, cover: single.thumbnail })}
+                    className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-cyan/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
+                  >
+                    <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
+                      {single.thumbnail ? (
+                        <img
+                          src={single.thumbnail}
+                          alt={single.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-white/5">
+                          <span className="material-symbols-outlined text-white/20 text-[40px]">album</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <div className="w-10 h-10 rounded-full bg-brand-cyan flex items-center justify-center text-black shadow-lg">
+                          <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            play_arrow
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-label-md font-bold text-white truncate group-hover:text-brand-cyan transition-colors">
+                      {single.title}
+                    </p>
+                    <p className="text-label-sm text-outline mt-0.5">{single.year || 'Single'}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── 4. Videos & Live Performances ── */}
+          {data.videos && data.videos.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-headline-sm font-bold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-rose-400 text-[22px]">smart_display</span>
+                  Videos & Live Performances
+                </h2>
+                <span className="text-body-sm text-outline">{data.videos.length} videos</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {data.videos.map((vid, i) => (
+                  <div
+                    key={vid.id || vid.videoId || i}
+                    onClick={() => loadSong({
+                      id: vid.videoId || vid.id,
+                      videoId: vid.videoId || vid.id,
+                      title: vid.title,
+                      artist: vid.artist || data.name,
+                      thumbnail: vid.thumbnail,
+                      cover: vid.cover || vid.thumbnail,
+                      duration: vid.duration,
+                      type: 'song',
+                    })}
+                    className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-rose-400/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
+                  >
+                    <div className="relative aspect-video rounded-xl overflow-hidden mb-3 bg-neutral-900">
+                      <img
+                        src={vid.thumbnail}
+                        alt={vid.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black shadow-lg">
+                          <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            play_arrow
+                          </span>
+                        </div>
+                      </div>
+                      {vid.duration > 0 && (
+                        <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-mono text-white">
+                          {formatDuration(vid.duration)}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-label-md font-bold text-white line-clamp-2 group-hover:text-rose-400 transition-colors">
+                      {vid.title}
+                    </p>
+                    {vid.views && <p className="text-label-sm text-outline mt-1">{vid.views}</p>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── 5. Playlists by Artist ── */}
+          {data.playlists && data.playlists.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-headline-sm font-bold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-amber-400 text-[22px]">featured_play_list</span>
+                  Playlists by Artist
+                </h2>
+                <span className="text-body-sm text-outline">{data.playlists.length} playlists</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {data.playlists.map((pl, i) => (
+                  <div
+                    key={pl.id || pl.browseId || i}
+                    onClick={() => navigateTo('album', pl.browseId || pl.id, { title: pl.title, artist: data.name, cover: pl.thumbnail })}
+                    className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-amber-400/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
+                  >
+                    <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
+                      {pl.thumbnail ? (
+                        <img
+                          src={pl.thumbnail}
+                          alt={pl.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-white/5">
+                          <span className="material-symbols-outlined text-white/20 text-[40px]">queue_music</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <div className="w-10 h-10 rounded-full bg-amber-400 flex items-center justify-center text-black shadow-lg">
+                          <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            play_arrow
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-label-md font-bold text-white truncate group-hover:text-amber-400 transition-colors">
+                      {pl.title}
+                    </p>
+                    {pl.songCount && <p className="text-label-sm text-outline mt-0.5">{pl.songCount}</p>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── 6. Fans Might Also Like (Similar Artists) ── */}
+          {data.similarArtists && data.similarArtists.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-headline-sm font-bold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-brand-violet text-[22px]">group</span>
+                  Fans Might Also Like
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {data.similarArtists.map((art, i) => (
+                  <div
+                    key={art.id || art.browseId || i}
+                    onClick={() => navigateTo('artist', art.browseId || art.id, { name: art.name })}
+                    className="group flex flex-col items-center text-center p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-violet/40 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
+                  >
+                    <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden mb-3 border-2 border-white/10 group-hover:border-brand-violet/60 transition-colors shadow-md">
+                      {art.thumbnail ? (
+                        <img
+                          src={art.thumbnail}
+                          alt={art.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-white/5">
+                          <span className="material-symbols-outlined text-white/30 text-[36px]">person</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-label-md font-bold text-white truncate w-full group-hover:text-brand-violet transition-colors">
+                      {art.name}
+                    </p>
+                    <p className="text-label-sm text-outline mt-0.5 truncate w-full">
+                      {art.subscribers || 'Artist'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </>
+      )}
+
+      {addMenuSong && (
+        <AddToPlaylistMenu song={addMenuSong} onClose={() => setAddMenuSong(null)} />
       )}
     </div>
   );

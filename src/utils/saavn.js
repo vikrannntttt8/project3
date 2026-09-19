@@ -72,32 +72,6 @@ function artistStr(artists) {
 export function normalizeSong(s) {
   if (!s) return null;
 
-  let downloadUrl = Array.isArray(s.downloadUrl) ? [...s.downloadUrl] : [];
-
-  // If encrypted_media_url is present, decrypt to full 320kbps MP3/MP4
-  if (!downloadUrl.length && s.encrypted_media_url) {
-    const full320 = decryptMediaUrl(s.encrypted_media_url);
-    if (full320) {
-      downloadUrl = [{ quality: '320kbps', url: full320 }];
-    }
-  }
-
-  // TASK 1: Full-length audio extraction (320kbps)
-  // Extract highest quality direct stream from song.downloadUrl array (quality: "320kbps" or last url)
-  // Do NOT use media_preview_url (prevents 30-second playback limit)
-  let stream = '';
-  if (downloadUrl.length) {
-    const high320 = downloadUrl.find(d => d?.quality === '320kbps' || String(d?.quality).includes('320'));
-    stream = high320?.url || high320?.link || downloadUrl[downloadUrl.length - 1]?.url || downloadUrl[downloadUrl.length - 1]?.link || '';
-  } else if (s.previewUrl) {
-    stream = s.previewUrl;
-  }
-
-  // Ensure full-length bitrate
-  if (typeof stream === 'string') {
-    stream = stream.replace(/_[0-9]+_p\.(mp4|mp3)/i, '_320.mp4');
-  }
-
   const coverUrl = bestImage(s.image || s.artworkUrl100 || s.thumbnail || s.cover);
   const videoId = s.videoId || s.youtubeId || (s.id && typeof s.id === 'string' && s.id.length === 11 ? s.id : null);
 
@@ -110,9 +84,7 @@ export function normalizeSong(s) {
     album:       s.album?.name || s.album || s.collectionName || '',
     thumbnail:   coverUrl,
     cover:       coverUrl,
-    downloadUrl: downloadUrl,
-    streamUrl:   stream,
-    duration:    Number(s.duration || s.trackTimeMillis ? Math.round((s.trackTimeMillis || 0)/1000) : 0),
+    duration:    Number(s.duration || (s.trackTimeMillis ? Math.round((s.trackTimeMillis || 0) / 1000) : 0)),
     language:    s.language || '',
     year:        s.year || (s.releaseDate ? s.releaseDate.slice(0, 4) : ''),
     hasLyrics:   Boolean(s.hasLyrics || s.has_lyrics),

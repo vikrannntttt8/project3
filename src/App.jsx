@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { PlayerProvider, usePlayer } from './context/PlayerContext.jsx';
-import HomeView    from './components/HomeView/HomeView.jsx';
-import LyricsView  from './components/LyricsView/LyricsView.jsx';
-import LibraryView from './components/LibraryView/LibraryView.jsx';
-import PlayerDock  from './components/PlayerDock/PlayerDock.jsx';
-import Sidebar     from './components/Sidebar.jsx';
-import ArtistView  from './components/ArtistView/ArtistView.jsx';
-import AlbumView   from './components/AlbumView/AlbumView.jsx';
+import HomeView      from './components/HomeView/HomeView.jsx';
+import LyricsView    from './components/LyricsView/LyricsView.jsx';
+import LibraryView   from './components/LibraryView/LibraryView.jsx';
+import PlayerDock    from './components/PlayerDock/PlayerDock.jsx';
+import Sidebar       from './components/Sidebar.jsx';
+import ArtistView    from './components/ArtistView/ArtistView.jsx';
+import AlbumView     from './components/AlbumView/AlbumView.jsx';
+import SettingsModal from './components/shared/SettingsModal.jsx';
 
 function AppShell() {
-  const { view, navState } = usePlayer();
+  const { view, navState, currentSong, isSettingsOpen, setIsSettingsOpen } = usePlayer();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Close mobile drawer on view change
@@ -19,16 +20,34 @@ function AppShell() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] relative">
-      {/* ── Ambient atmospheric glow ─────────────────────────── */}
+      {/* ── Reactive Ambient Background Engine (WCAG Frosted Mask) ────────── */}
       <div aria-hidden="true" className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute -top-[10%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-gradient-to-tr from-[#6b21a8] via-[#a21caf] to-[#0e7490] opacity-20 blur-[140px]"
-          style={{ animation: 'glow-pulse 8s ease-in-out infinite' }} />
+        {/* Dynamic artwork blur */}
+        {currentSong?.cover || currentSong?.thumbnail ? (
+          <div
+            className="absolute inset-[-20%] bg-cover bg-center transition-all duration-1000 ease-out"
+            style={{
+              backgroundImage: `url(${currentSong.cover || currentSong.thumbnail})`,
+              filter: 'blur(80px)',
+              transform: 'scale(1.25)',
+              opacity: 0.3,
+            }}
+          />
+        ) : (
+          <div
+            className="absolute -top-[10%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-gradient-to-tr from-[#6b21a8] via-[#a21caf] to-[#0e7490] opacity-20 blur-[140px]"
+            style={{ animation: 'glow-pulse 8s ease-in-out infinite' }}
+          />
+        )}
         <div className="absolute bottom-[-15%] right-[-5%] w-[45vw] h-[45vw] rounded-full bg-[#1e1b4b] opacity-25 blur-[130px]" />
         <div className="absolute top-[30%] left-[40%] w-[30vw] h-[30vw] rounded-full bg-[#0c4a6e] opacity-15 blur-[120px]" />
+
+        {/* Dark frosted readability mask maintaining WCAG contrast */}
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
       </div>
 
       {/* ── Mobile Hamburger Toggle (Visible only on mobile when not in lyrics) ── */}
-      {view !== 'lyrics' && (
+      {view !== 'lyrics' && !isSettingsOpen && (
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="md:hidden fixed top-4 left-4 z-40 p-2 rounded-xl glass-panel text-white hover:bg-white/10 flex items-center justify-center shadow-lg border border-white/10"
@@ -52,7 +71,7 @@ function AppShell() {
       {/* On desktop: fixed left bar. On mobile: slide-over drawer */}
       <div className={`
         fixed inset-y-0 left-0 z-40 md:static md:z-20 transition-all duration-300 flex-shrink-0
-        ${view === 'lyrics' ? 'hidden md:w-0 md:overflow-hidden md:opacity-0' : ''}
+        ${view === 'lyrics' || isSettingsOpen ? 'hidden md:w-0 md:overflow-hidden md:opacity-0' : ''}
         ${mobileMenuOpen ? 'translate-x-0 w-64 shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-60'}
       `}>
         <Sidebar />
@@ -70,8 +89,11 @@ function AppShell() {
         </div>
       </div>
 
-      {/* ── Persistent Glass Player Dock (hidden in expanded lyrics view) ── */}
-      {view !== 'lyrics' && <PlayerDock />}
+      {/* ── Persistent Glass Player Dock (hidden in expanded lyrics view or full-screen settings) ── */}
+      {view !== 'lyrics' && !isSettingsOpen && <PlayerDock />}
+
+      {/* ── Full-Screen Settings Overlay ── */}
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }

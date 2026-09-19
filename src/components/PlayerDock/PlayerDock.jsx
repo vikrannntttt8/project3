@@ -3,7 +3,6 @@ import { usePlayer } from '../../context/PlayerContext.jsx';
 import SeekBar      from './SeekBar.jsx';
 import VolumeSlider from './VolumeSlider.jsx';
 import AddToPlaylistMenu from '../shared/AddToPlaylistMenu.jsx';
-
 export default function PlayerDock() {
   const {
     currentSong, isPlaying, isLoading,
@@ -12,12 +11,13 @@ export default function PlayerDock() {
     view, toggleView,
     togglePlay, playNext, playPrev,
     isLiked, toggleLike,
+    isSettingsOpen,
   } = usePlayer();
 
   const [addMenuSong, setAddMenuSong] = useState(null);
 
-  // TASK 2: Unmount/hide mini-player dock when full-screen expanded view is opened
-  if (view === 'lyrics') {
+  // Auto-unmount/hide mini-player dock when full-screen expanded views open (lyrics or settings)
+  if (view === 'lyrics' || isSettingsOpen) {
     return null;
   }
 
@@ -29,7 +29,7 @@ export default function PlayerDock() {
         <div className="glass-dock player-dock-inner rounded-2xl px-3 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-4 max-w-5xl mx-auto shadow-2xl border border-white/10">
 
           {/* ── Left: Track info + Actions ────────────────────── */}
-          <div className="flex items-center gap-2 sm:gap-3 w-[150px] sm:w-[220px] min-w-0 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 max-w-[135px] xs:max-w-[170px] sm:max-w-[220px] min-w-0 flex-shrink-1">
             <div className={`player-dock-thumb relative w-9 h-9 sm:w-11 sm:h-11 rounded-lg overflow-hidden flex-shrink-0 ${isPlaying ? 'ring-1 ring-brand-violet' : ''}`}>
               {currentSong?.thumbnail ? (
                 <img src={currentSong.thumbnail} alt={currentSong.title}

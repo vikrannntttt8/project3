@@ -152,12 +152,12 @@ export default function ArtistModal({ artistId, artistName, onClose, onSelectTra
                 </div>
               )}
 
-              {/* Albums & Singles */}
+              {/* Albums */}
               {data.albums && data.albums.length > 0 && (
                 <div>
                   <h3 className="text-label-lg font-bold text-white flex items-center gap-2 mb-3">
                     <span className="material-symbols-outlined text-brand-violet text-[18px]">album</span>
-                    Albums & Releases
+                    Albums
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {data.albums.map((alb, i) => (
@@ -178,6 +178,77 @@ export default function ArtistModal({ artistId, artistName, onClose, onSelectTra
                         )}
                         <p className="text-label-md font-semibold text-white truncate">{alb.title}</p>
                         <p className="text-label-sm text-outline">{alb.year || 'Album'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Singles & EPs */}
+              {data.singles && data.singles.length > 0 && (
+                <div>
+                  <h3 className="text-label-lg font-bold text-white flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-brand-cyan text-[18px]">disc_full</span>
+                    Singles & EPs
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {data.singles.map((single, i) => (
+                      <div
+                        key={single.id || i}
+                        className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/5 transition-colors"
+                      >
+                        {single.thumbnail ? (
+                          <img
+                            src={single.thumbnail}
+                            alt=""
+                            className="w-full aspect-square rounded-lg object-cover mb-2"
+                          />
+                        ) : (
+                          <div className="w-full aspect-square rounded-lg bg-white/5 flex items-center justify-center mb-2">
+                            <span className="material-symbols-outlined text-white/20">album</span>
+                          </div>
+                        )}
+                        <p className="text-label-md font-semibold text-white truncate">{single.title}</p>
+                        <p className="text-label-sm text-outline">{single.year || 'Single'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Videos & Live Performances */}
+              {data.videos && data.videos.length > 0 && (
+                <div>
+                  <h3 className="text-label-lg font-bold text-white flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-rose-400 text-[18px]">smart_display</span>
+                    Videos & Live
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {data.videos.map((vid, i) => (
+                      <div
+                        key={vid.id || i}
+                        onClick={() => onSelectTrack?.({
+                          id: vid.videoId || vid.id,
+                          videoId: vid.videoId || vid.id,
+                          title: vid.title,
+                          artist: data.name,
+                          thumbnail: vid.thumbnail,
+                          cover: vid.cover || vid.thumbnail,
+                          duration: vid.duration,
+                          type: 'song',
+                        })}
+                        className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
+                      >
+                        <div className="relative aspect-video rounded-lg overflow-hidden mb-2">
+                          <img src={vid.thumbnail} alt="" className="w-full h-full object-cover" />
+                          {vid.duration > 0 && (
+                            <span className="absolute bottom-1.5 right-1.5 px-1 py-0.5 rounded bg-black/80 text-[10px] text-white">
+                              {formatDuration(vid.duration)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-label-md font-semibold text-white truncate">{vid.title}</p>
+                        {vid.views && <p className="text-label-sm text-outline">{vid.views}</p>}
                       </div>
                     ))}
                   </div>

@@ -7,7 +7,7 @@ export default function AlbumArtPanel() {
   const {
     currentSong, isPlaying, togglePlay,
     currentTime, duration, seek, volume, changeVolume,
-    isLiked, toggleLike, playPrev, playNext, toggleView,
+    isLiked, toggleLike, playPrev, playNext,
   } = usePlayer();
 
   const [addMenuSong, setAddMenuSong] = useState(null);

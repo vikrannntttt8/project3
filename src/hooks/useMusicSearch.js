@@ -44,23 +44,24 @@ export function useMusicSearch() {
     setError(null);
     try {
       // Primary: Innertube backend search gateway
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}&type=${tab}`);
       if (res.ok) {
-        const songs = await res.json();
-        if (Array.isArray(songs) && songs.length > 0) {
-          if (tab === 'songs') {
-            setResults(songs);
-            return;
-          }
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
           if (tab === 'all') {
+            const songs = data.filter(item => !item.type || item.type === 'song');
+            const albums = data.filter(item => item.type === 'album');
+            const artists = data.filter(item => item.type === 'artist');
             setResults({
-              songs: songs,
-              albums: [],
-              artists: [],
+              songs,
+              albums,
+              artists,
               playlists: [],
             });
             return;
           }
+          setResults(data);
+          return;
         }
       }
 

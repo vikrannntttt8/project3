@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useDebounce } from '../hooks/useDebounce.js';
 import { usePlayer } from '../context/PlayerContext.jsx';
 import { formatDuration } from '../utils/timeFormat.js';
+import AddToPlaylistMenu from './shared/AddToPlaylistMenu.jsx';
 
 const TABS = [
   { id: 'all',     label: 'All',     icon: 'explore' },
@@ -21,12 +22,13 @@ const TABS = [
  * - Integrated navigation to Artist and Album views
  */
 export default function Search({ onSelectTrack, onArtistClick }) {
-  const { navigateTo, loadSong } = usePlayer();
+  const { navigateTo, loadSong, isLiked, toggleLike } = usePlayer();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [addMenuSong, setAddMenuSong] = useState(null);
 
   // Synchronous input typing + 200ms debounced network dispatch
   const debouncedQuery = useDebounce(searchTerm, 200);
@@ -321,9 +323,39 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                  <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-3">
+                    {/* Like button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLike(track);
+                      }}
+                      className={`p-1.5 rounded-full transition-transform active:scale-90 ${
+                        isLiked(track.id) ? 'text-brand-pink' : 'text-outline hover:text-brand-pink'
+                      }`}
+                      title={isLiked(track.id) ? 'Unlike' : 'Like'}
+                    >
+                      <span className="material-symbols-outlined text-[19px]" style={{ fontVariationSettings: `'FILL' ${isLiked(track.id) ? 1 : 0}` }}>
+                        favorite
+                      </span>
+                    </button>
+
+                    {/* Add to playlist button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAddMenuSong(track);
+                      }}
+                      className="p-1.5 rounded-full text-outline hover:text-white transition-colors"
+                      title="Add to playlist"
+                    >
+                      <span className="material-symbols-outlined text-[19px]">playlist_add</span>
+                    </button>
+
                     {track.duration > 0 && (
-                      <span className="text-label-sm font-mono text-outline tabular-nums">
+                      <span className="text-label-sm font-mono text-outline tabular-nums ml-1 hidden sm:inline">
                         {formatDuration(track.duration)}
                       </span>
                     )}
@@ -333,7 +365,7 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                         e.stopPropagation();
                         handleTrackClick(track);
                       }}
-                      className="p-1.5 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                      className="p-1.5 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors ml-1"
                       title="Play track"
                     >
                       <span className="material-symbols-outlined text-[20px]">play_circle</span>
@@ -344,6 +376,10 @@ export default function Search({ onSelectTrack, onArtistClick }) {
             })}
           </div>
         </div>
+      )}
+
+      {addMenuSong && (
+        <AddToPlaylistMenu song={addMenuSong} onClose={() => setAddMenuSong(null)} />
       )}
     </div>
   );

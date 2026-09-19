@@ -260,7 +260,13 @@ export async function resolveAudioStream(videoId) {
 /**
  * 3. getArtistDetails(browseId: string)
  * Fetches the artist's discography, top songs, and albums using yt.music.getArtist(browseId).
- * Maps and returns tracks with valid IDs and album metadata.
+ * Maps and returns full structural shelves matching YouTube Music client parity:
+ * - Top Songs (complete list, not limited to 5)
+ * - Albums
+ * - Singles & EPs
+ * - Videos & Live Performances
+ * - Playlists
+ * - Fans might also like (Similar Artists)
  */
 export async function getArtistDetails(browseId) {
   if (!browseId) throw new Error('browseId is required');
@@ -274,57 +280,165 @@ export async function getArtistDetails(browseId) {
     || artist.thumbnails?.slice(-1)[0]?.url
     || '';
 
-  // Extract top songs
-  const topSongsSection = artist.sections?.find((s) => s.title?.text?.toLowerCase().includes('song') || s.type === 'MusicShelf')
-    || artist.sections?.[0];
-
-  const topSongs = (topSongsSection?.contents || []).map((s) => {
-    let dur = 0;
-    if (typeof s.duration?.seconds === 'number') {
-      dur = s.duration.seconds;
-    } else if (s.duration?.text) {
-      const parts = s.duration.text.split(':').map(Number);
-      if (parts.length === 2) dur = parts[0] * 60 + parts[1];
-      else if (parts.length === 3) dur = parts[0] * 3600 + parts[1] * 60 + parts[2];
+  const parseDuration = (durObj) => {
+    if (typeof durObj?.seconds === 'number') return durObj.seconds;
+    if (durObj?.text) {
+      const parts = durObj.text.split(':').map(Number);
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
     }
+    return 0;
+  };
 
-    const thumb = s.thumbnails?.slice(-1)[0]?.url || (s.id ? `https://i.ytimg.com/vi/${s.id}/hqdefault.jpg` : '');
-
-    return {
-      id: s.id || '',
-      videoId: s.id || '',
-      title: s.title || 'Unknown Title',
-      artist: name,
-      artistId: browseId,
-      album: s.album?.name || (typeof s.album === 'string' ? s.album : undefined),
-      duration: dur,
-      thumbnail: thumb,
-      cover: thumb,
-      isOfficial: true,
-      type: 'song',
-    };
-  }).filter((s) => s.id);
-
-  // Extract albums and singles discography
-  const albumsSections = artist.sections?.filter((s) => {
-    const t = s.title?.text?.toLowerCase() || '';
-    return t.includes('album') || t.includes('single') || t.includes('release');
-  }) || [];
-
+  const topSongs = [];
   const albums = [];
-  for (const sec of albumsSections) {
-    for (const a of sec.contents || []) {
-      const thumb = a.thumbnails?.slice(-1)[0]?.url || '';
-      albums.push({
-        id: a.id || '',
-        browseId: a.id || '',
-        title: a.title || 'Unknown Album',
+  const singles = [];
+  const videos = [];
+  const playlists = [];
+  const similarArtists = [];
+
+  for (const sec of artist.sections || []) {
+    const rawTitle = (sec.title?.text || sec.header?.title?.text || '').toLowerCase();
+    const contents = sec.contents || [];
+
+    // 1. Top Songs / Songs
+    if (rawTitle.includes('song') || rawTitle.includes('popular') || rawTitle.includes('top track')) {
+      for (const s of contents) {
+        const id = s.id || s.videoId || '';
+        if (!id) continue;
+        const dur = parseDuration(s.duration);
+        const thumb = s.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+        topSongs.push({
+          id,
+          videoId: id,
+          title: s.title?.text || s.title || 'Unknown Title',
+          artist: s.artists?.map((a) => a.name).filter(Boolean).join(', ') || name,
+          artistId: browseId,
+          album: s.album?.name || (typeof s.album === 'string' ? s.album : undefined),
+          duration: dur,
+          thumbnail: thumb,
+          cover: thumb,
+          isOfficial: true,
+          type: 'song',
+        });
+      }
+    }
+    // 2. Singles & EPs
+    else if (rawTitle.includes('single') || rawTitle.includes('ep')) {
+      for (const a of contents) {
+        const id = a.id || a.browseId || '';
+        if (!id) continue;
+        const thumb = a.thumbnails?.slice(-1)[0]?.url || '';
+        singles.push({
+          id,
+          browseId: id,
+          title: a.title?.text || a.title || 'Unknown Single',
+          artist: name,
+          artistId: browseId,
+          year: a.year || (a.subtitle?.text ? a.subtitle.text.match(/\b(19\d\d|20\d\d)\b/)?.[1] : ''),
+          thumbnail: thumb,
+          cover: thumb,
+          type: 'album',
+          isSingle: true,
+        });
+      }
+    }
+    // 3. Albums
+    else if (rawTitle.includes('album')) {
+      for (const a of contents) {
+        const id = a.id || a.browseId || '';
+        if (!id) continue;
+        const thumb = a.thumbnails?.slice(-1)[0]?.url || '';
+        albums.push({
+          id,
+          browseId: id,
+          title: a.title?.text || a.title || 'Unknown Album',
+          artist: name,
+          artistId: browseId,
+          year: a.year || (a.subtitle?.text ? a.subtitle.text.match(/\b(19\d\d|20\d\d)\b/)?.[1] : ''),
+          thumbnail: thumb,
+          cover: thumb,
+          type: 'album',
+        });
+      }
+    }
+    // 4. Videos & Live Performances
+    else if (rawTitle.includes('video') || rawTitle.includes('live') || rawTitle.includes('performance')) {
+      for (const v of contents) {
+        const id = v.id || v.videoId || '';
+        if (!id) continue;
+        const dur = parseDuration(v.duration);
+        const thumb = v.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+        videos.push({
+          id,
+          videoId: id,
+          title: v.title?.text || v.title || 'Music Video',
+          artist: name,
+          artistId: browseId,
+          duration: dur,
+          views: v.views?.text || v.short_view_count?.text || '',
+          thumbnail: thumb,
+          cover: thumb,
+          type: 'video',
+        });
+      }
+    }
+    // 5. Playlists
+    else if (rawTitle.includes('playlist') || rawTitle.includes('featured')) {
+      for (const p of contents) {
+        const id = p.id || p.browseId || '';
+        if (!id) continue;
+        const thumb = p.thumbnails?.slice(-1)[0]?.url || '';
+        playlists.push({
+          id,
+          browseId: id,
+          title: p.title?.text || p.title || 'Playlist',
+          artist: name,
+          songCount: p.item_count?.text || p.song_count || '',
+          thumbnail: thumb,
+          cover: thumb,
+          type: 'playlist',
+        });
+      }
+    }
+    // 6. Fans might also like / Similar Artists
+    else if (rawTitle.includes('fan') || rawTitle.includes('similar') || rawTitle.includes('like')) {
+      for (const art of contents) {
+        const id = art.id || art.browseId || '';
+        if (!id) continue;
+        const thumb = art.thumbnails?.slice(-1)[0]?.url || '';
+        similarArtists.push({
+          id,
+          browseId: id,
+          name: art.title?.text || art.name || 'Similar Artist',
+          subscribers: art.subscribers?.text || art.subtitle?.text || 'Artist',
+          thumbnail: thumb,
+          cover: thumb,
+          type: 'artist',
+        });
+      }
+    }
+  }
+
+  // Fallback if topSongs was empty: check first section
+  if (topSongs.length === 0 && artist.sections?.[0]?.contents?.length) {
+    for (const s of artist.sections[0].contents) {
+      const id = s.id || s.videoId || '';
+      if (!id) continue;
+      const dur = parseDuration(s.duration);
+      const thumb = s.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+      topSongs.push({
+        id,
+        videoId: id,
+        title: s.title?.text || s.title || 'Unknown Title',
         artist: name,
         artistId: browseId,
-        year: a.year || '',
+        album: s.album?.name || (typeof s.album === 'string' ? s.album : undefined),
+        duration: dur,
         thumbnail: thumb,
         cover: thumb,
-        type: 'album',
+        isOfficial: true,
+        type: 'song',
       });
     }
   }
@@ -337,6 +451,10 @@ export async function getArtistDetails(browseId) {
     thumbnail,
     topSongs,
     albums,
+    singles,
+    videos,
+    playlists,
+    similarArtists,
   };
 }
 

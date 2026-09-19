@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { usePlayer } from '../../context/PlayerContext.jsx';
 import { useMusicSearch, SEARCH_TABS } from '../../hooks/useMusicSearch.js';
-import { getAlbumSongs, getArtistSongs, getPlaylistSongs, searchSongs as saavnSearchSongs } from '../../utils/saavn.js';
+import { getPlaylistSongs, searchSongs as saavnSearchSongs } from '../../utils/saavn.js';
 import SearchBar      from './SearchBar.jsx';
 import SongRow        from './SongRow.jsx';
 import AlbumCard      from './AlbumCard.jsx';
@@ -344,9 +344,6 @@ function HomeDefault({ onPlaySong, onArtistClick }) {
         />
       </section>
 
-      {/* Now playing album art */}
-      <NowPlayingHero />
-
       {/* Featured grid */}
       <section className="flex flex-col gap-3">
         <h2 className="text-headline-sm font-semibold text-white">Featured Stations</h2>
@@ -374,53 +371,6 @@ function HomeDefault({ onPlaySong, onArtistClick }) {
       </section>
 
       <TipBanner />
-    </div>
-  );
-}
-
-function NowPlayingHero() {
-  const { currentSong, isPlaying, togglePlay, isLiked, toggleLike } = usePlayer();
-  if (!currentSong) return (
-    <div className="w-full h-36 rounded-2xl glass-card border border-white/5 flex items-center justify-center gap-4">
-      <span className="material-symbols-outlined text-[48px] text-white/10">music_note</span>
-      <div>
-        <p className="text-headline-sm font-semibold text-on-surface-variant">Nothing playing</p>
-        <p className="text-body-md text-outline">Search for a song or click a station above</p>
-      </div>
-    </div>
-  );
-
-  const liked = isLiked(currentSong.id);
-
-  return (
-    <div className="w-full rounded-2xl glass-card border border-white/5 p-4 flex items-center gap-4">
-      <div className={`w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 ${isPlaying ? 'ring-2 ring-brand-violet' : ''}`}>
-        <img src={currentSong.thumbnail} alt="" className="w-full h-full object-cover" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">Now Playing</p>
-        <h2 className="text-headline-sm font-bold text-white truncate">{currentSong.title}</h2>
-        <p className="text-body-md text-on-surface-variant">{currentSong.artist}</p>
-      </div>
-      <button
-        onClick={() => toggleLike(currentSong)}
-        className={`p-2 rounded-full transition-transform active:scale-90 ${
-          liked ? 'text-brand-pink' : 'text-on-surface-variant hover:text-brand-pink'
-        }`}
-        title={liked ? 'Unlike' : 'Like'}
-      >
-        <span className="material-symbols-outlined text-[24px]" style={{fontVariationSettings:`'FILL' ${liked ? 1 : 0}`}}>
-          favorite
-        </span>
-      </button>
-      <button
-        onClick={togglePlay}
-        className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-lg flex-shrink-0"
-      >
-        <span className="material-symbols-outlined text-[24px] text-black" style={{fontVariationSettings:"'FILL' 1"}}>
-          {isPlaying ? 'pause' : 'play_arrow'}
-        </span>
-      </button>
     </div>
   );
 }

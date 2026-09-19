@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { usePlayer } from '../../context/PlayerContext.jsx';
 import { formatDuration } from '../../utils/timeFormat.js';
+import AddToPlaylistMenu from '../shared/AddToPlaylistMenu.jsx';
 
 export default function AlbumView({ browseId, initialData }) {
-  const { navigateTo, goBack, playAlbum, loadSong, currentSong, isPlaying, togglePlay } = usePlayer();
+  const { navigateTo, goBack, playAlbum, currentSong, isPlaying, togglePlay, isLiked, toggleLike } = usePlayer();
   const [data, setData] = useState(initialData || null);
   const [loading, setLoading] = useState(!initialData?.tracks);
   const [error, setError] = useState(null);
+  const [addMenuSong, setAddMenuSong] = useState(null);
 
   useEffect(() => {
     if (!browseId) return;
@@ -213,13 +215,43 @@ export default function AlbumView({ browseId, initialData }) {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ml-3">
+                        {/* Like button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleLike(track);
+                          }}
+                          className={`p-1.5 rounded-full transition-transform active:scale-90 ${
+                            isLiked(track.id) ? 'text-brand-pink' : 'text-outline hover:text-brand-pink'
+                          }`}
+                          title={isLiked(track.id) ? 'Unlike' : 'Like'}
+                        >
+                          <span className="material-symbols-outlined text-[19px]" style={{ fontVariationSettings: `'FILL' ${isLiked(track.id) ? 1 : 0}` }}>
+                            favorite
+                          </span>
+                        </button>
+
+                        {/* Add to playlist button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAddMenuSong(track);
+                          }}
+                          className="p-1.5 rounded-full text-outline hover:text-white transition-colors"
+                          title="Add to playlist"
+                        >
+                          <span className="material-symbols-outlined text-[19px]">playlist_add</span>
+                        </button>
+
                         {track.duration > 0 && (
-                          <span className="text-label-sm font-mono text-outline tabular-nums">
+                          <span className="text-label-sm font-mono text-outline tabular-nums ml-1 hidden sm:inline">
                             {formatDuration(track.duration)}
                           </span>
                         )}
-                        <span className="material-symbols-outlined text-[20px] text-white/40 group-hover:text-white transition-colors">
+                        <span className="material-symbols-outlined text-[20px] text-white/40 group-hover:text-white transition-colors ml-1">
                           play_circle
                         </span>
                       </div>
@@ -230,6 +262,10 @@ export default function AlbumView({ browseId, initialData }) {
             </section>
           )}
         </>
+      )}
+
+      {addMenuSong && (
+        <AddToPlaylistMenu song={addMenuSong} onClose={() => setAddMenuSong(null)} />
       )}
     </div>
   );

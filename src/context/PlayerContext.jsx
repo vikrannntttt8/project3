@@ -35,6 +35,7 @@ export function PlayerProvider({ children }) {
   // State: { view: 'home' | 'search' | 'artist' | 'album' | 'lyrics' | 'library' | 'liked', currentId: string | null, extra: any }
   const [navState, setNavState] = useState({ view: 'home', currentId: null, extra: null });
   const [navHistory, setNavHistory] = useState([]);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const view = navState.view;
   const setView = useCallback((newView) => {
@@ -373,6 +374,7 @@ export function PlayerProvider({ children }) {
     lrcString, lyricsSource, lyricsLoading,
     view, setView,
     navState, setNavState, navigateTo, goBack, playAlbum,
+    isSettingsOpen, setIsSettingsOpen,
     // Actions
     play, pause, togglePlay, seek, changeVolume, toggleMute,
     loadSong, playNext, playPrev, playCollection, toggleView,
@@ -390,10 +392,11 @@ export function PlayerProvider({ children }) {
           position: 'absolute',
           opacity: 0,
           pointerEvents: 'none',
-          width: '1px',
-          height: '1px',
-          left: '-9999px',
-          top: '-9999px',
+          width: '200px',
+          height: '200px',
+          left: '0px',
+          top: '0px',
+          zIndex: -50,
         }}
         aria-hidden="true"
       />

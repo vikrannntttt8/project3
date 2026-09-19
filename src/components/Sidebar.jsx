@@ -9,8 +9,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar() {
-  const { view, setView, playlists, liked, playCollection, customAlbums = [] } = usePlayer();
-  const [showSettings, setShowSettings] = useState(false);
+  const { view, setView, playlists, liked, playCollection, customAlbums = [], setIsSettingsOpen } = usePlayer();
 
   return (
     <aside className="h-full w-60 glass-panel flex flex-col justify-between py-4 px-3 border-r border-white/5 select-none overflow-hidden">
@@ -117,10 +116,10 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* TASK 1: Settings button anchored to bottom left */}
+      {/* Settings button anchored to bottom left */}
       <div className="flex-shrink-0 pt-2 border-t border-white/5 mt-auto">
         <button
-          onClick={() => setShowSettings(true)}
+          onClick={() => setIsSettingsOpen(true)}
           className="sidebar-settings-btn flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-on-surface-variant hover:text-white hover:bg-white/5 transition-all duration-200 w-full text-left group min-h-[44px]"
           title="Settings"
         >
@@ -130,8 +129,6 @@ export default function Sidebar() {
           <span className="text-body-md font-medium">Settings</span>
         </button>
       </div>
-
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </aside>
   );
 }
