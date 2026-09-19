@@ -3,6 +3,7 @@ import { useDebounce } from '../hooks/useDebounce.js';
 import { usePlayer } from '../context/PlayerContext.jsx';
 import { formatDuration } from '../utils/timeFormat.js';
 import AddToPlaylistMenu from './shared/AddToPlaylistMenu.jsx';
+import ImageWithFallback from './shared/ImageWithFallback.jsx';
 
 const TABS = [
   { id: 'all',     label: 'All',     icon: 'explore' },
@@ -189,17 +190,13 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                     className="group flex items-center justify-between p-3 hover:bg-white/[0.06] transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {item.thumbnail ? (
-                        <img
-                          src={item.thumbnail}
-                          alt=""
-                          className="w-12 h-12 rounded-full object-cover flex-shrink-0 border border-white/10 group-hover:border-brand-violet/50 transition-colors"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0 border border-white/10">
-                          <span className="material-symbols-outlined text-white/50 text-[24px]">person</span>
-                        </div>
-                      )}
+                      <ImageWithFallback
+                        src={item.thumbnail}
+                        alt={item.name}
+                        icon="person"
+                        iconClassName="text-white/50 text-[24px]"
+                        className="w-12 h-12 rounded-full object-cover flex-shrink-0 border border-white/10 group-hover:border-brand-violet/50 transition-colors"
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-label-md font-semibold text-white truncate group-hover:text-brand-violet transition-colors">
@@ -230,17 +227,13 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                     className="group flex items-center justify-between p-3 hover:bg-white/[0.06] transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {item.thumbnail || item.cover ? (
-                        <img
-                          src={item.thumbnail || item.cover}
-                          alt=""
-                          className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-white/10 group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
-                          <span className="material-symbols-outlined text-white/40 text-[24px]">album</span>
-                        </div>
-                      )}
+                      <ImageWithFallback
+                        src={item.thumbnail || item.cover}
+                        alt={item.title}
+                        icon="album"
+                        iconClassName="text-white/40 text-[24px]"
+                        className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-white/10 group-hover:scale-105 transition-transform"
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-label-md font-semibold text-white truncate group-hover:text-brand-violet transition-colors">
@@ -273,9 +266,11 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-neutral-900">
-                      <img
+                      <ImageWithFallback
                         src={track.thumbnail || track.cover}
-                        alt=""
+                        alt={track.title}
+                        icon="music_note"
+                        iconClassName="text-white/40 text-[22px]"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">

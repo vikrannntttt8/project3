@@ -34,6 +34,103 @@ export async function getInnertube() {
 }
 
 /**
+ * Universal Thumbnail Resolver
+ * Deeply inspects all variants of InnerTube & YouTube thumbnail structures:
+ * - Array of thumbnail objects: [ { url, width, height }, ... ]
+ * - MusicThumbnail object: { type: 'MusicThumbnail', contents: [ { url, width, height }, ... ] }
+ * - Nested renderer: item.thumbnailRenderer.musicThumbnailRenderer.thumbnail.thumbnails
+ * - Flat item.thumbnails: [ { url, width, height }, ... ]
+ * - item.thumbnail: [ ... ] or item.thumbnail.contents / item.thumbnail.thumbnails
+ * - Strapline / Header variants: item.strapline_thumbnail.contents
+ * - Direct string URL
+ * - Always selects the highest resolution (largest width/height) to avoid blurry 60x60 thumbnails
+ * - Optional fallback to videoId/hqdefault if ID is provided
+ */
+export function resolveThumbnail(itemOrThumbnail, fallbackVideoId = null) {
+  if (!itemOrThumbnail) {
+    return fallbackVideoId ? `https://i.ytimg.com/vi/${fallbackVideoId}/hqdefault.jpg` : '';
+  }
+
+  if (typeof itemOrThumbnail === 'string' && itemOrThumbnail.trim()) {
+    return itemOrThumbnail.trim();
+  }
+
+  let candidates = [];
+
+  // 1. Direct array of { url, width, height }
+  if (Array.isArray(itemOrThumbnail)) {
+    candidates = itemOrThumbnail;
+  }
+  // 2. MusicThumbnail / MusicThumbnailRenderer with .contents
+  else if (Array.isArray(itemOrThumbnail?.contents)) {
+    candidates = itemOrThumbnail.contents;
+  }
+  // 3. Object with .thumbnail
+  else if (itemOrThumbnail?.thumbnail) {
+    if (Array.isArray(itemOrThumbnail.thumbnail)) {
+      candidates = itemOrThumbnail.thumbnail;
+    } else if (Array.isArray(itemOrThumbnail.thumbnail?.contents)) {
+      candidates = itemOrThumbnail.thumbnail.contents;
+    } else if (Array.isArray(itemOrThumbnail.thumbnail?.thumbnails)) {
+      candidates = itemOrThumbnail.thumbnail.thumbnails;
+    } else if (typeof itemOrThumbnail.thumbnail === 'string') {
+      return itemOrThumbnail.thumbnail.trim();
+    }
+  }
+  // 4. Object with .thumbnails
+  else if (Array.isArray(itemOrThumbnail?.thumbnails)) {
+    candidates = itemOrThumbnail.thumbnails;
+  }
+  // 5. item.thumbnailRenderer.musicThumbnailRenderer or musicThumbnailRenderer
+  else if (itemOrThumbnail?.thumbnailRenderer?.musicThumbnailRenderer) {
+    const mtr = itemOrThumbnail.thumbnailRenderer.musicThumbnailRenderer;
+    candidates = mtr.thumbnail?.thumbnails || mtr.thumbnail?.contents || [];
+  }
+  else if (itemOrThumbnail?.musicThumbnailRenderer) {
+    const mtr = itemOrThumbnail.musicThumbnailRenderer;
+    candidates = mtr.thumbnail?.thumbnails || mtr.thumbnail?.contents || [];
+  }
+  // 6. Strapline / Header variants
+  else if (itemOrThumbnail?.strapline_thumbnail?.contents) {
+    candidates = itemOrThumbnail.strapline_thumbnail.contents;
+  }
+  else if (itemOrThumbnail?.header?.thumbnail) {
+    return resolveThumbnail(itemOrThumbnail.header.thumbnail, fallbackVideoId);
+  }
+
+  if (Array.isArray(candidates) && candidates.length > 0) {
+    const valid = candidates.filter((c) => c && typeof (c.url || c.link) === 'string');
+    if (valid.length > 0) {
+      const hasDims = valid.some((c) => (Number(c.width) || 0) > 0 || (Number(c.height) || 0) > 0);
+      if (hasDims) {
+        // Sort descending by width, then height
+        valid.sort((a, b) => {
+          const wA = Number(a.width) || 0;
+          const wB = Number(b.width) || 0;
+          if (wB !== wA) return wB - wA;
+          const hA = Number(a.height) || 0;
+          const hB = Number(b.height) || 0;
+          return hB - hA;
+        });
+        const best = valid[0]?.url || valid[0]?.link;
+        if (best) return best;
+      } else {
+        // In InnerTube/YouTube thumbnail arrays without dimensions, last item is the highest resolution
+        const last = valid[valid.length - 1];
+        const best = last?.url || last?.link || valid[0]?.url || valid[0]?.link;
+        if (best) return best;
+      }
+    }
+  }
+
+  if (fallbackVideoId) {
+    return `https://i.ytimg.com/vi/${fallbackVideoId}/hqdefault.jpg`;
+  }
+
+  return '';
+}
+
+/**
  * Helper to parse a song item into a clean unified schema.
  */
 function parseSongItem(item) {
@@ -55,8 +152,7 @@ function parseSongItem(item) {
     else if (parts.length === 3) duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
   }
 
-  const thumbnail = item.thumbnails?.slice(-1)[0]?.url
-    || (id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '');
+  const thumbnail = resolveThumbnail(item, id);
 
   // Check if official release (official artist channel, topic, or verified badge)
   const isOfficial = Boolean(
@@ -75,6 +171,7 @@ function parseSongItem(item) {
     duration,
     thumbnail,
     cover: thumbnail,
+    thumbnailUrl: thumbnail,
     isOfficial,
     type: 'song',
   };
@@ -134,7 +231,7 @@ export async function searchMusic(query, type = 'all') {
       const artist = a.artists?.map((x) => x.name).filter(Boolean).join(', ') || a.author?.name || 'Unknown Artist';
       const artistId = firstArtist?.channel_id || firstArtist?.id || undefined;
       const year = a.year || '';
-      const thumbnail = a.thumbnails?.slice(-1)[0]?.url || '';
+      const thumbnail = resolveThumbnail(a);
 
       return {
         id,
@@ -158,7 +255,7 @@ export async function searchMusic(query, type = 'all') {
     return contents.map((art) => {
       const id = art.id || '';
       const name = art.name || art.title || 'Unknown Artist';
-      const thumbnail = art.thumbnails?.slice(-1)[0]?.url || '';
+      const thumbnail = resolveThumbnail(art);
 
       return {
         id,
@@ -185,28 +282,34 @@ export async function searchMusic(query, type = 'all') {
       .filter((t) => t.id && t.id.length >= 10);
 
     const albums = (albumRes.status === 'fulfilled' ? (albumRes.value.albums?.contents || albumRes.value.contents || []) : [])
-      .map((a) => ({
-        id: a.id || '',
-        browseId: a.id || '',
-        title: a.title || 'Unknown Album',
-        artist: a.artists?.map((x) => x.name).filter(Boolean).join(', ') || a.author?.name || 'Unknown Artist',
-        year: a.year || '',
-        thumbnail: a.thumbnails?.slice(-1)[0]?.url || '',
-        cover: a.thumbnails?.slice(-1)[0]?.url || '',
-        type: 'album',
-      }))
+      .map((a) => {
+        const thumb = resolveThumbnail(a);
+        return {
+          id: a.id || '',
+          browseId: a.id || '',
+          title: a.title || 'Unknown Album',
+          artist: a.artists?.map((x) => x.name).filter(Boolean).join(', ') || a.author?.name || 'Unknown Artist',
+          year: a.year || '',
+          thumbnail: thumb,
+          cover: thumb,
+          type: 'album',
+        };
+      })
       .filter((a) => a.id);
 
     const artists = (artistRes.status === 'fulfilled' ? (artistRes.value.artists?.contents || artistRes.value.contents || []) : [])
-      .map((art) => ({
-        id: art.id || '',
-        browseId: art.id || '',
-        name: art.name || art.title || 'Unknown Artist',
-        title: art.name || art.title || 'Unknown Artist',
-        thumbnail: art.thumbnails?.slice(-1)[0]?.url || '',
-        cover: art.thumbnails?.slice(-1)[0]?.url || '',
-        type: 'artist',
-      }))
+      .map((art) => {
+        const thumb = resolveThumbnail(art);
+        return {
+          id: art.id || '',
+          browseId: art.id || '',
+          name: art.name || art.title || 'Unknown Artist',
+          title: art.name || art.title || 'Unknown Artist',
+          thumbnail: thumb,
+          cover: thumb,
+          type: 'artist',
+        };
+      })
       .filter((art) => art.id);
 
     // Return combined result list with official releases prioritized
@@ -276,9 +379,13 @@ export async function getArtistDetails(browseId) {
 
   const name = artist.header?.title?.text || artist.name || 'Unknown Artist';
   const description = artist.header?.description?.text || '';
-  const thumbnail = artist.header?.thumbnails?.slice(-1)[0]?.url
-    || artist.thumbnails?.slice(-1)[0]?.url
-    || '';
+  const thumbnail = resolveThumbnail(
+    artist.header?.thumbnail
+    || artist.header?.thumbnails
+    || artist.header
+    || artist.thumbnail
+    || artist.thumbnails
+  );
 
   const parseDuration = (durObj) => {
     if (typeof durObj?.seconds === 'number') return durObj.seconds;
@@ -307,7 +414,7 @@ export async function getArtistDetails(browseId) {
         const id = s.id || s.videoId || '';
         if (!id) continue;
         const dur = parseDuration(s.duration);
-        const thumb = s.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+        const thumb = resolveThumbnail(s, id);
         topSongs.push({
           id,
           videoId: id,
@@ -328,7 +435,7 @@ export async function getArtistDetails(browseId) {
       for (const a of contents) {
         const id = a.id || a.browseId || '';
         if (!id) continue;
-        const thumb = a.thumbnails?.slice(-1)[0]?.url || '';
+        const thumb = resolveThumbnail(a);
         singles.push({
           id,
           browseId: id,
@@ -348,7 +455,7 @@ export async function getArtistDetails(browseId) {
       for (const a of contents) {
         const id = a.id || a.browseId || '';
         if (!id) continue;
-        const thumb = a.thumbnails?.slice(-1)[0]?.url || '';
+        const thumb = resolveThumbnail(a);
         albums.push({
           id,
           browseId: id,
@@ -368,7 +475,7 @@ export async function getArtistDetails(browseId) {
         const id = v.id || v.videoId || '';
         if (!id) continue;
         const dur = parseDuration(v.duration);
-        const thumb = v.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+        const thumb = resolveThumbnail(v, id);
         videos.push({
           id,
           videoId: id,
@@ -388,7 +495,7 @@ export async function getArtistDetails(browseId) {
       for (const p of contents) {
         const id = p.id || p.browseId || '';
         if (!id) continue;
-        const thumb = p.thumbnails?.slice(-1)[0]?.url || '';
+        const thumb = resolveThumbnail(p);
         playlists.push({
           id,
           browseId: id,
@@ -406,7 +513,7 @@ export async function getArtistDetails(browseId) {
       for (const art of contents) {
         const id = art.id || art.browseId || '';
         if (!id) continue;
-        const thumb = art.thumbnails?.slice(-1)[0]?.url || '';
+        const thumb = resolveThumbnail(art);
         similarArtists.push({
           id,
           browseId: id,
@@ -426,7 +533,7 @@ export async function getArtistDetails(browseId) {
       const id = s.id || s.videoId || '';
       if (!id) continue;
       const dur = parseDuration(s.duration);
-      const thumb = s.thumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+      const thumb = resolveThumbnail(s, id);
       topSongs.push({
         id,
         videoId: id,
@@ -477,10 +584,13 @@ export async function getAlbumDetails(browseId) {
   const yearMatch = subtitleText.match(/\b(19\d\d|20\d\d)\b/);
   if (yearMatch) year = yearMatch[1];
 
-  const thumbnail = album.header?.thumbnail?.contents?.[0]?.url
-    || album.header?.strapline_thumbnail?.contents?.[0]?.url
-    || album.thumbnails?.slice(-1)[0]?.url
-    || '';
+  const thumbnail = resolveThumbnail(
+    album.header?.thumbnail
+    || album.header?.strapline_thumbnail
+    || album.header
+    || album.thumbnails
+    || album
+  );
 
   const description = album.header?.description?.text || '';
 
@@ -494,6 +604,8 @@ export async function getAlbumDetails(browseId) {
       else if (parts.length === 3) dur = parts[0] * 3600 + parts[1] * 60 + parts[2];
     }
 
+    const trackThumb = resolveThumbnail(s, s.id) || thumbnail;
+
     return {
       id: s.id || '',
       videoId: s.id || '',
@@ -503,8 +615,8 @@ export async function getAlbumDetails(browseId) {
       artistId: artistId,
       album: title,
       duration: dur,
-      thumbnail: thumbnail,
-      cover: thumbnail,
+      thumbnail: trackThumb,
+      cover: trackThumb,
       isOfficial: true,
       type: 'song',
     };

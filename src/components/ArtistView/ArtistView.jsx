@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { usePlayer } from '../../context/PlayerContext.jsx';
 import { formatDuration } from '../../utils/timeFormat.js';
 import AddToPlaylistMenu from '../shared/AddToPlaylistMenu.jsx';
+import ImageWithFallback from '../shared/ImageWithFallback.jsx';
 
 export default function ArtistView({ browseId, artistName }) {
   const { navigateTo, goBack, loadSong, currentSong, isPlaying, togglePlay, isLiked, toggleLike } = usePlayer();
@@ -112,17 +113,13 @@ export default function ArtistView({ browseId, artistName }) {
           {/* Hero Banner */}
           <div className="relative rounded-3xl overflow-hidden bg-gradient-to-b from-brand-violet/25 via-[#121216] to-[#09090B] border border-white/10 p-6 sm:p-10 shadow-2xl">
             <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-8">
-              {data.thumbnail ? (
-                <img
-                  src={data.thumbnail}
-                  alt={data.name}
-                  className="w-36 h-36 sm:w-48 sm:h-48 rounded-full object-cover border-4 border-brand-violet/30 shadow-2xl flex-shrink-0"
-                />
-              ) : (
-                <div className="w-36 h-36 sm:w-48 sm:h-48 rounded-full bg-white/10 border-4 border-white/10 flex items-center justify-center flex-shrink-0">
-                  <span className="material-symbols-outlined text-[64px] text-white/30">person</span>
-                </div>
-              )}
+              <ImageWithFallback
+                src={data.thumbnail}
+                alt={data.name}
+                icon="person"
+                iconClassName="text-white/30 text-[64px]"
+                className="w-36 h-36 sm:w-48 sm:h-48 rounded-full object-cover border-4 border-brand-violet/30 shadow-2xl flex-shrink-0"
+              />
 
               <div className="flex-1 text-center sm:text-left min-w-0 space-y-2.5">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-violet/20 border border-brand-violet/40 text-brand-violet text-[11px] font-semibold uppercase tracking-wider">
@@ -195,9 +192,11 @@ export default function ArtistView({ browseId, artistName }) {
                           )}
                         </div>
 
-                        <img
+                        <ImageWithFallback
                           src={track.thumbnail || track.cover}
-                          alt=""
+                          alt={track.title}
+                          icon="music_note"
+                          iconClassName="text-white/30 text-[20px]"
                           className="w-11 h-11 rounded-lg object-cover flex-shrink-0 shadow-sm"
                         />
 
@@ -293,17 +292,13 @@ export default function ArtistView({ browseId, artistName }) {
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-violet/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
-                      {alb.thumbnail ? (
-                        <img
-                          src={alb.thumbnail}
-                          alt={alb.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-white/5">
-                          <span className="material-symbols-outlined text-white/20 text-[40px]">album</span>
-                        </div>
-                      )}
+                      <ImageWithFallback
+                        src={alb.thumbnail}
+                        alt={alb.title}
+                        icon="album"
+                        iconClassName="text-white/20 text-[40px]"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                         <div className="w-10 h-10 rounded-full bg-brand-violet flex items-center justify-center text-white shadow-lg">
                           <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -342,17 +337,13 @@ export default function ArtistView({ browseId, artistName }) {
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-cyan/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
-                      {single.thumbnail ? (
-                        <img
-                          src={single.thumbnail}
-                          alt={single.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-white/5">
-                          <span className="material-symbols-outlined text-white/20 text-[40px]">album</span>
-                        </div>
-                      )}
+                      <ImageWithFallback
+                        src={single.thumbnail}
+                        alt={single.title}
+                        icon="album"
+                        iconClassName="text-white/20 text-[40px]"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                         <div className="w-10 h-10 rounded-full bg-brand-cyan flex items-center justify-center text-black shadow-lg">
                           <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -400,9 +391,11 @@ export default function ArtistView({ browseId, artistName }) {
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-rose-400/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-video rounded-xl overflow-hidden mb-3 bg-neutral-900">
-                      <img
+                      <ImageWithFallback
                         src={vid.thumbnail}
                         alt={vid.title}
+                        icon="smart_display"
+                        iconClassName="text-white/20 text-[40px]"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -448,17 +441,13 @@ export default function ArtistView({ browseId, artistName }) {
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-amber-400/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
-                      {pl.thumbnail ? (
-                        <img
-                          src={pl.thumbnail}
-                          alt={pl.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-white/5">
-                          <span className="material-symbols-outlined text-white/20 text-[40px]">queue_music</span>
-                        </div>
-                      )}
+                      <ImageWithFallback
+                        src={pl.thumbnail}
+                        alt={pl.title}
+                        icon="queue_music"
+                        iconClassName="text-white/20 text-[40px]"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                         <div className="w-10 h-10 rounded-full bg-amber-400 flex items-center justify-center text-black shadow-lg">
                           <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -496,17 +485,13 @@ export default function ArtistView({ browseId, artistName }) {
                     className="group flex flex-col items-center text-center p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-violet/40 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden mb-3 border-2 border-white/10 group-hover:border-brand-violet/60 transition-colors shadow-md">
-                      {art.thumbnail ? (
-                        <img
-                          src={art.thumbnail}
-                          alt={art.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-white/5">
-                          <span className="material-symbols-outlined text-white/30 text-[36px]">person</span>
-                        </div>
-                      )}
+                      <ImageWithFallback
+                        src={art.thumbnail}
+                        alt={art.name}
+                        icon="person"
+                        iconClassName="text-white/30 text-[36px]"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
                     </div>
 
                     <p className="text-label-md font-bold text-white truncate w-full group-hover:text-brand-violet transition-colors">

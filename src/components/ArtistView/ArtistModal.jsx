@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { formatDuration } from '../../utils/timeFormat.js';
+import ImageWithFallback from '../shared/ImageWithFallback.jsx';
 
 /**
  * ArtistModal — Dedicated artist view with discography, top songs, and albums
@@ -68,17 +69,13 @@ export default function ArtistModal({ artistId, artistName, onClose, onSelectTra
           </button>
 
           <div className="flex items-end gap-4">
-            {data?.thumbnail ? (
-              <img
-                src={data.thumbnail}
-                alt=""
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-2 border-brand-violet/40 shadow-lg flex-shrink-0"
-              />
-            ) : (
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/10 flex-shrink-0">
-                <span className="material-symbols-outlined text-[36px] text-white/40">person</span>
-              </div>
-            )}
+            <ImageWithFallback
+              src={data?.thumbnail}
+              alt={data?.name || ''}
+              icon="person"
+              iconClassName="text-white/40 text-[36px]"
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-2 border-brand-violet/40 shadow-lg flex-shrink-0"
+            />
             <div className="min-w-0">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-violet">Artist Discography</span>
               <h2 className="text-headline-md font-bold text-white truncate">
@@ -130,9 +127,11 @@ export default function ArtistModal({ artistId, artistName, onClose, onSelectTra
                         <span className="w-5 text-center hidden group-hover:inline text-brand-violet material-symbols-outlined text-[18px]">
                           play_arrow
                         </span>
-                        <img
+                        <ImageWithFallback
                           src={track.thumbnail || track.cover}
-                          alt=""
+                          alt={track.title}
+                          icon="music_note"
+                          iconClassName="text-white/30 text-[18px]"
                           className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                         />
                         <div className="flex-1 min-w-0">
@@ -165,17 +164,13 @@ export default function ArtistModal({ artistId, artistName, onClose, onSelectTra
                         key={alb.id || i}
                         className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/5 transition-colors"
                       >
-                        {alb.thumbnail ? (
-                          <img
-                            src={alb.thumbnail}
-                            alt=""
-                            className="w-full aspect-square rounded-lg object-cover mb-2"
-                          />
-                        ) : (
-                          <div className="w-full aspect-square rounded-lg bg-white/5 flex items-center justify-center mb-2">
-                            <span className="material-symbols-outlined text-white/20">album</span>
-                          </div>
-                        )}
+                        <ImageWithFallback
+                          src={alb.thumbnail}
+                          alt={alb.title}
+                          icon="album"
+                          iconClassName="text-white/20 text-[28px]"
+                          className="w-full aspect-square rounded-lg object-cover mb-2"
+                        />
                         <p className="text-label-md font-semibold text-white truncate">{alb.title}</p>
                         <p className="text-label-sm text-outline">{alb.year || 'Album'}</p>
                       </div>
@@ -197,17 +192,13 @@ export default function ArtistModal({ artistId, artistName, onClose, onSelectTra
                         key={single.id || i}
                         className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/5 transition-colors"
                       >
-                        {single.thumbnail ? (
-                          <img
-                            src={single.thumbnail}
-                            alt=""
-                            className="w-full aspect-square rounded-lg object-cover mb-2"
-                          />
-                        ) : (
-                          <div className="w-full aspect-square rounded-lg bg-white/5 flex items-center justify-center mb-2">
-                            <span className="material-symbols-outlined text-white/20">album</span>
-                          </div>
-                        )}
+                        <ImageWithFallback
+                          src={single.thumbnail}
+                          alt={single.title}
+                          icon="album"
+                          iconClassName="text-white/20 text-[28px]"
+                          className="w-full aspect-square rounded-lg object-cover mb-2"
+                        />
                         <p className="text-label-md font-semibold text-white truncate">{single.title}</p>
                         <p className="text-label-sm text-outline">{single.year || 'Single'}</p>
                       </div>
@@ -240,7 +231,13 @@ export default function ArtistModal({ artistId, artistName, onClose, onSelectTra
                         className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/5 transition-colors cursor-pointer"
                       >
                         <div className="relative aspect-video rounded-lg overflow-hidden mb-2">
-                          <img src={vid.thumbnail} alt="" className="w-full h-full object-cover" />
+                          <ImageWithFallback
+                            src={vid.thumbnail}
+                            alt={vid.title}
+                            icon="smart_display"
+                            iconClassName="text-white/20 text-[28px]"
+                            className="w-full h-full object-cover"
+                          />
                           {vid.duration > 0 && (
                             <span className="absolute bottom-1.5 right-1.5 px-1 py-0.5 rounded bg-black/80 text-[10px] text-white">
                               {formatDuration(vid.duration)}
