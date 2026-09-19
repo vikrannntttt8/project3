@@ -273,6 +273,8 @@ function innertubeApiPlugin() {
 export default defineConfig({
   plugins: [react(), innertubeApiPlugin()],
   server: {
+    host: true,
+    port: 5173,
     proxy: {
       '/api/saavn': {
         target: 'https://saavn.dev/api',
