@@ -2,7 +2,7 @@ import { formatTime } from '../../utils/timeFormat.js';
 import { usePlayer } from '../../context/PlayerContext.jsx';
 
 export default function SongRow({ song, index, isActive, isPlaying, onPlay, onAddToPlaylist }) {
-  const { isLiked, toggleLike } = usePlayer();
+  const { isLiked, toggleLike, handleEntityClick } = usePlayer();
   const liked = isLiked(song.id);
 
   return (
@@ -47,13 +47,40 @@ export default function SongRow({ song, index, isActive, isPlaying, onPlay, onAd
             <span className="ml-1 text-label-sm bg-white/10 text-on-surface-variant px-1 rounded align-middle">E</span>
           )}
         </span>
-        <span className="text-body-sm text-on-surface-variant truncate">{song.artist}</span>
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEntityClick({
+              id: song.artistId || null,
+              name: song.artist,
+              type: 'artist',
+            }, { preferType: 'artist' });
+          }}
+          className="text-body-sm text-on-surface-variant hover:text-white hover:underline truncate inline-block cursor-pointer transition-colors"
+          title={`View ${song.artist}'s profile`}
+        >
+          {song.artist}
+        </span>
       </div>
 
       {/* Album (hidden on small) */}
-      <span className="hidden lg:block text-body-sm text-on-surface-variant truncate max-w-[160px]">
-        {song.album}
-      </span>
+      {song.album && (
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEntityClick({
+              id: song.albumId || null,
+              title: song.album,
+              artist: song.artist,
+              type: 'album',
+            }, { preferType: 'album' });
+          }}
+          className="hidden lg:block text-body-sm text-on-surface-variant hover:text-white hover:underline truncate max-w-[160px] cursor-pointer transition-colors"
+          title={`View album: ${song.album}`}
+        >
+          {song.album}
+        </span>
+      )}
 
       {/* Actions */}
       <div className={`flex items-center gap-2 flex-shrink-0 transition-opacity ${

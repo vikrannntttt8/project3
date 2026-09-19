@@ -9,8 +9,7 @@ import {
 } from '../../utils/authSync.js';
 
 export default function SettingsModal({ isOpen, onClose }) {
-  const { liked, playlists, customAlbums } = usePlayer();
-  const [audioQuality, setAudioQuality] = useState(() => localStorage.getItem('pulse_audio_quality') || 'high');
+  const { liked, playlists, customAlbums, audioQuality, setAudioQuality } = usePlayer();
   const [normalizeAudio, setNormalizeAudio] = useState(() => localStorage.getItem('pulse_normalize_audio') !== 'false');
 
   // ── Auth & InnerTube Sync state ──────────────────────────────────
@@ -22,6 +21,21 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState(null); // { success: boolean, message: string }
   const [saveToast, setSaveToast] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+
+  // Real-time SAPISID format validation
+  const getSapisidValidation = (val) => {
+    if (!val || !val.trim()) {
+      return { status: 'empty', label: 'Not configured', dotColor: 'bg-white/30', textColor: 'text-outline' };
+    }
+    const extracted = extractSapisid(val);
+    if (extracted && extracted.length >= 8) {
+      return { status: 'valid', label: 'Valid SAPISID Token Detected', dotColor: 'bg-emerald-400', textColor: 'text-emerald-400' };
+    }
+    return { status: 'invalid', label: 'Incomplete / Invalid Token', dotColor: 'bg-amber-400', textColor: 'text-amber-400' };
+  };
+
+  const sapisidValidation = getSapisidValidation(sapisidInput);
 
   // Sync state when modal opens
   useEffect(() => {
@@ -231,40 +245,97 @@ export default function SettingsModal({ isOpen, onClose }) {
           {/* Tab A: Cookie / SAPISID */}
           {authTab === 'sapisid' && (
             <div className="space-y-3">
-              <label className="text-label-md uppercase tracking-wider text-outline font-semibold block">
-                SAPISID String or Raw Cookie Header
-              </label>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-label-md uppercase tracking-wider text-outline font-semibold block">
+                  SAPISID String or Raw Cookie Header
+                </label>
+                {/* Real-time validation status dot */}
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className={`w-2 h-2 rounded-full ${sapisidValidation.dotColor} ${sapisidValidation.status === 'valid' ? 'animate-pulse' : ''}`} />
+                  <span className={sapisidValidation.textColor}>{sapisidValidation.label}</span>
+                </div>
+              </div>
+
               <p className="text-body-sm text-outline">
-                Paste your <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">SAPISID</code> token or your full YouTube cookie string. Pulse Music dynamically computes the <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">SAPISIDHASH</code> web signature for authenticated requests.
+                Paste your <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">SAPISID</code> token or your full YouTube cookie string. Pulse dynamically computes <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">SAPISIDHASH</code> web signatures for authenticated requests.
               </p>
-              <input
-                type="password"
-                value={sapisidInput}
-                onChange={(e) => setSapisidInput(e.target.value)}
-                placeholder="Paste SAPISID token or cookie string..."
-                className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/15 text-white placeholder-outline text-body-md focus:outline-none focus:border-brand-violet/70 focus:ring-1 focus:ring-brand-violet/70 transition-all font-mono"
-              />
+
+              <div className="relative">
+                <input
+                  type="password"
+                  value={sapisidInput}
+                  onChange={(e) => setSapisidInput(e.target.value)}
+                  placeholder="Paste SAPISID token or cookie string..."
+                  className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/15 text-white placeholder-outline text-body-md focus:outline-none focus:border-brand-violet/70 focus:ring-1 focus:ring-brand-violet/70 transition-all font-mono pr-20"
+                />
+                {sapisidInput && (
+                  <button
+                    type="button"
+                    onClick={() => setSapisidInput('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-outline hover:text-white px-2 py-1 bg-white/10 hover:bg-white/15 rounded-md transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Step-by-step extraction guide */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowGuide(!showGuide)}
+                  className="text-xs text-brand-violet hover:underline flex items-center gap-1 font-medium"
+                >
+                  <span className="material-symbols-outlined text-[16px]">help</span>
+                  <span>{showGuide ? 'Hide DevTools extraction steps' : 'How to extract your SAPISID cookie in 4 steps'}</span>
+                </button>
+
+                {showGuide && (
+                  <div className="mt-2.5 p-3.5 rounded-xl bg-white/[0.03] border border-white/10 space-y-2 text-xs text-white/80 animate-fade-in">
+                    <p className="font-semibold text-white">Extracting your token in under 30 seconds:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-outline">
+                      <li>Open <a href="https://music.youtube.com" target="_blank" rel="noreferrer" className="text-brand-cyan underline">music.youtube.com</a> in Chrome / Edge / Brave and log in.</li>
+                      <li>Press <kbd className="px-1 py-0.5 bg-white/10 rounded font-mono text-[11px]">F12</kbd> (or right click → <em>Inspect</em>) to open DevTools.</li>
+                      <li>Switch to the <strong>Application</strong> (or Storage) tab → Expand <strong>Cookies</strong> → Click <code>https://music.youtube.com</code>.</li>
+                      <li>Double-click the value of <strong>SAPISID</strong> (or <code>__Secure-3PAPISID</code>), copy it, and paste it in the box above.</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* Tab B: OAuth JSON Blob */}
           {authTab === 'oauth' && (
             <div className="space-y-3">
-              <label className="text-label-md uppercase tracking-wider text-outline font-semibold block">
-                OAuth 2.0 Credentials JSON Payload
-              </label>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-label-md uppercase tracking-wider text-outline font-semibold block">
+                  OAuth 2.0 Credentials JSON Payload
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOauthJsonInput(`{\n  "access_token": "ya29.a0AfH6SM...",\n  "refresh_token": "1//04...",\n  "token_type": "Bearer",\n  "expiry_date": ${Date.now() + 3600000}\n}`);
+                    setJsonError('');
+                  }}
+                  className="text-xs text-brand-cyan hover:underline flex items-center gap-1 font-medium"
+                >
+                  <span className="material-symbols-outlined text-[14px]">content_paste</span>
+                  <span>Insert Sample OAuth Template</span>
+                </button>
+              </div>
               <p className="text-body-sm text-outline">
                 Paste your InnerTube OAuth JSON blob containing at least <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">access_token</code> (and optionally <code className="text-white bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">refresh_token</code>).
               </p>
               <textarea
-                rows={4}
+                rows={5}
                 value={oauthJsonInput}
                 onChange={(e) => {
                   setOauthJsonInput(e.target.value);
                   setJsonError('');
                 }}
                 placeholder='{&#10;  "access_token": "ya29....",&#10;  "refresh_token": "1//...",&#10;  "token_type": "Bearer"&#10;}'
-                className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/15 text-white placeholder-outline text-body-sm focus:outline-none focus:border-brand-cyan/70 focus:ring-1 focus:ring-brand-cyan/70 transition-all font-mono"
+                className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/15 text-white placeholder-outline text-body-sm focus:outline-none focus:border-brand-cyan/70 focus:ring-1 focus:ring-brand-cyan/70 transition-all font-mono text-xs"
               />
               {jsonError && (
                 <p className="text-body-sm text-brand-pink flex items-center gap-1.5">
@@ -306,19 +377,31 @@ export default function SettingsModal({ isOpen, onClose }) {
             </button>
           </div>
 
-          {/* Test feedback alert */}
+          {/* Test feedback alert with actionable guidance */}
           {testResult && (
-            <div className={`p-4 rounded-2xl border text-body-sm flex items-center gap-3 animate-fade-in ${
+            <div className={`p-4 rounded-2xl border text-body-sm flex items-start gap-3 animate-fade-in ${
               testResult.success
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
             }`}>
-              <span className="material-symbols-outlined text-[22px] flex-shrink-0">
+              <span className="material-symbols-outlined text-[22px] flex-shrink-0 mt-0.5">
                 {testResult.success ? 'verified' : 'warning'}
               </span>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold">{testResult.success ? 'Connection Verified' : 'Sync Ping Failed'}</p>
-                <p className="text-white/80 text-xs mt-0.5">{testResult.message}</p>
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="font-semibold text-[14px]">
+                  {testResult.success ? 'Connection Verified & Sync Active' : 'Sync Verification Failed'}
+                </p>
+                <p className="text-white/80 text-xs">{testResult.message}</p>
+                {!testResult.success && (
+                  <div className="mt-2 pt-2 border-t border-rose-500/20 text-xs text-rose-200/90 space-y-1">
+                    <p className="font-medium text-rose-200">Actionable Troubleshooting:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-rose-200/80 text-[11px]">
+                      <li>If code is <strong>401</strong>, your YouTube session expired. Refresh <code>music.youtube.com</code> and copy a new SAPISID.</li>
+                      <li>If using <strong>OAuth</strong>, ensure <code>access_token</code> is current or provide a valid <code>refresh_token</code>.</li>
+                      <li>Ensure your local backend proxy server is running without ad-blocker network interference.</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -352,9 +435,9 @@ export default function SettingsModal({ isOpen, onClose }) {
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
-                { id: 'high', title: 'Maximum Quality', desc: 'Opus / 320kbps Parity' },
-                { id: 'medium', title: 'Standard Quality', desc: '160kbps AAC/WebM' },
-                { id: 'data-saver', title: 'Data Saver', desc: '96kbps Low Bandwidth' },
+                { id: 'max', title: 'Maximum Quality (Opus)', desc: 'Highest available Opus (itag 251 ~140kbps)' },
+                { id: 'standard', title: 'Standard Quality (AAC)', desc: 'High compatibility AAC (itag 140 ~131kbps)' },
+                { id: 'datasaver', title: 'Data Saver (Low Bandwidth)', desc: 'Efficiency Opus (itag 250 ~72kbps, 50% savings)' },
               ].map((opt) => (
                 <button
                   key={opt.id}

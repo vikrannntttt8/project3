@@ -325,38 +325,97 @@ export async function searchMusic(query, type = 'all') {
 }
 
 /**
- * 2. resolveAudioStream(videoId: string)
- * Retrieves raw media streams via getBasicInfo/getInfo.
- * Picks optimal audio-only format using chooseFormat({ type: 'audio', quality: 'best' }).
+ * 2. resolveAudioStream(videoId: string, quality: 'max' | 'standard' | 'datasaver' = 'max')
+ * Retrieves raw media streams via getBasicInfo.
+ * Selects optimal audio-only format enforcing real quality constraints:
+ * - max: Highest available Opus (itag 251) or highest-bitrate WebM/AAC
+ * - standard: Restricts to ~160kbps ceiling (e.g., itag 140 AAC or mid-tier Opus)
+ * - datasaver: Restricts to low-bandwidth ~70-96kbps equivalents (itag 250/249/139)
  * Handles player cipher extraction to return a deciphered, direct streaming URL.
  */
-export async function resolveAudioStream(videoId) {
+export async function resolveAudioStream(videoId, quality = 'max') {
   if (!videoId) throw new Error('videoId is required');
 
   const yt = await getInnertube();
   const info = await yt.getBasicInfo(videoId);
 
-  const bestAudio = info.chooseFormat({ type: 'audio', quality: 'best' });
-  if (!bestAudio) {
+  const allAdaptive = info.streaming_data?.adaptive_formats || [];
+  const audioFormats = allAdaptive.filter((f) => f.has_audio && !f.has_video);
+
+  let selectedAudio = null;
+
+  if (audioFormats.length > 0) {
+    if (quality === 'datasaver' || quality === 'low') {
+      // Low-bandwidth ~70-96kbps ceiling (itag 250, 249, 139)
+      const low = audioFormats.filter((f) => (f.bitrate || 0) <= 98000);
+      if (low.length > 0) {
+        low.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+        selectedAudio = low[0];
+      } else {
+        const sorted = [...audioFormats].sort((a, b) => (a.bitrate || 0) - (b.bitrate || 0));
+        selectedAudio = sorted[0];
+      }
+    } else if (quality === 'standard' || quality === 'medium') {
+      // Mid-tier ~160kbps ceiling (prefer AAC itag 140 or mid-tier Opus)
+      const mid = audioFormats.filter((f) => (f.bitrate || 0) <= 165000);
+      if (mid.length > 0) {
+        const aac = mid.find((f) => f.itag === 140);
+        if (aac) {
+          selectedAudio = aac;
+        } else {
+          mid.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+          selectedAudio = mid[0];
+        }
+      } else {
+        selectedAudio = audioFormats[0];
+      }
+    } else {
+      // 'max' / 'high' -> Prefer Opus itag 251 or highest bitrate available
+      const opus251 = audioFormats.find((f) => f.itag === 251);
+      if (opus251) {
+        selectedAudio = opus251;
+      } else {
+        const sorted = [...audioFormats].sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+        selectedAudio = sorted[0];
+      }
+    }
+  }
+
+  // Fallback to chooseFormat if adaptive formats empty
+  if (!selectedAudio) {
+    selectedAudio = info.chooseFormat({
+      type: 'audio',
+      quality: quality === 'datasaver' ? 'lowest' : 'best',
+    });
+  }
+
+  if (!selectedAudio) {
     throw new Error(`No audio format found for video: ${videoId}`);
   }
 
   // Handle player cipher extraction to return deciphered direct streaming URL
-  let directStreamUrl = bestAudio.url;
-  if (!directStreamUrl && (bestAudio.signature_cipher || bestAudio.cipher)) {
-    directStreamUrl = await bestAudio.decipher(yt.session.player);
+  let directStreamUrl = selectedAudio.url;
+  if (!directStreamUrl && (selectedAudio.signature_cipher || selectedAudio.cipher)) {
+    directStreamUrl = await selectedAudio.decipher(yt.session.player);
   }
 
   if (!directStreamUrl) {
     throw new Error('Failed to decipher audio stream URL');
   }
 
+  const rawBitrate = selectedAudio.bitrate || (quality === 'datasaver' ? 72000 : quality === 'standard' ? 128000 : 160000);
+  const kbps = Math.round(rawBitrate / 1000);
+
   return {
     streamUrl: directStreamUrl,
-    bitrate: bestAudio.bitrate || 160000,
-    mimeType: bestAudio.mime_type || 'audio/mp4',
-    contentLength: bestAudio.content_length,
-    itag: bestAudio.itag,
+    bitrate: rawBitrate,
+    averageBitrate: selectedAudio.average_bitrate || rawBitrate,
+    kbps: `${kbps}kbps`,
+    mimeType: selectedAudio.mime_type || 'audio/webm',
+    contentLength: selectedAudio.content_length,
+    itag: selectedAudio.itag,
+    qualityLabel: quality === 'max' ? `Max Opus (${kbps}kbps)` : quality === 'datasaver' ? `Data Saver (${kbps}kbps)` : `Standard (${kbps}kbps)`,
+    quality,
   };
 }
 

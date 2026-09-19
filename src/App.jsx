@@ -7,10 +7,11 @@ import PlayerDock    from './components/PlayerDock/PlayerDock.jsx';
 import Sidebar       from './components/Sidebar.jsx';
 import ArtistView    from './components/ArtistView/ArtistView.jsx';
 import AlbumView     from './components/AlbumView/AlbumView.jsx';
+import SingleView    from './components/SingleView/SingleView.jsx';
 import SettingsModal from './components/shared/SettingsModal.jsx';
 
 function AppShell() {
-  const { view, navState, currentSong, isSettingsOpen, setIsSettingsOpen } = usePlayer();
+  const { view, navState, currentSong, isSettingsOpen, setIsSettingsOpen, streamToast } = usePlayer();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Close mobile drawer on view change
@@ -83,11 +84,25 @@ function AppShell() {
           {(view === 'home' || view === 'search') && <HomeView />}
           {view === 'artist'  && <ArtistView browseId={navState.currentId} artistName={navState.extra?.name} />}
           {view === 'album'   && <AlbumView browseId={navState.currentId} initialData={navState.extra} />}
+          {view === 'single'  && <SingleView videoId={navState.currentId} track={navState.extra} />}
           {view === 'lyrics'  && <LyricsView />}
           {view === 'library' && <LibraryView initialSection="playlists" />}
           {view === 'liked'   && <LibraryView initialSection="liked" />}
         </div>
       </div>
+
+      {/* ── Stream Quality / Bitrate Toast ── */}
+      {streamToast && (
+        <div className="fixed top-5 right-5 z-[110] p-3.5 rounded-2xl bg-[#18181c]/95 border border-brand-cyan/40 shadow-2xl backdrop-blur-xl flex items-center gap-3 animate-fade-in text-white">
+          <div className="w-8 h-8 rounded-xl bg-brand-cyan/20 border border-brand-cyan/30 flex items-center justify-center text-brand-cyan flex-shrink-0">
+            <span className="material-symbols-outlined text-[18px]">graphic_eq</span>
+          </div>
+          <div>
+            <p className="text-label-md font-bold text-white">{streamToast.title}</p>
+            <p className="text-body-xs font-mono text-outline">{streamToast.detail}</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Persistent Glass Player Dock (hidden in expanded lyrics view or full-screen settings) ── */}
       {view !== 'lyrics' && !isSettingsOpen && <PlayerDock />}

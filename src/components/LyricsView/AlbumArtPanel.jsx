@@ -8,6 +8,7 @@ export default function AlbumArtPanel() {
     currentSong, isPlaying, togglePlay,
     currentTime, duration, seek, volume, changeVolume,
     isLiked, toggleLike, playPrev, playNext,
+    handleEntityClick, audioQuality, setAudioQuality, activeStreamMeta, toggleView,
   } = usePlayer();
 
   const [addMenuSong, setAddMenuSong] = useState(null);
@@ -39,13 +40,53 @@ export default function AlbumArtPanel() {
         {/* Track metadata & Action buttons */}
         <div className="w-full flex items-center justify-between mb-3 sm:mb-4">
           <div className="flex flex-col pr-3 min-w-0 flex-1">
-            <h1 className="text-[20px] sm:text-[24px] font-bold tracking-tight text-white leading-snug truncate">
+            <h1 
+              onClick={() => {
+                if (currentSong) {
+                  toggleView(); // close lyrics view
+                  handleEntityClick(currentSong);
+                }
+              }}
+              className="text-[20px] sm:text-[24px] font-bold tracking-tight text-white leading-snug truncate hover:text-brand-violet cursor-pointer transition-colors"
+              title="View track / album details"
+            >
               {currentSong?.title || 'No Track Loaded'}
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-body-sm font-medium text-on-surface-variant truncate">
+              <span 
+                onClick={() => {
+                  if (currentSong?.artist) {
+                    toggleView();
+                    handleEntityClick({
+                      id: currentSong.artistId || null,
+                      name: currentSong.artist,
+                      type: 'artist'
+                    }, { preferType: 'artist' });
+                  }
+                }}
+                className="text-body-sm font-medium text-on-surface-variant hover:text-white hover:underline cursor-pointer truncate transition-colors"
+                title={`View ${currentSong?.artist}'s profile`}
+              >
                 {currentSong?.artist || '—'}
               </span>
+
+              {/* Live Bitrate / Format Indicator */}
+              {currentSong && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextQ = audioQuality === 'max' ? 'standard' : audioQuality === 'standard' ? 'datasaver' : 'max';
+                    setAudioQuality(nextQ);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.08] hover:bg-white/15 text-[10px] font-mono text-white/70 hover:text-white transition-all ml-1"
+                  title={`Active Bitrate: ${activeStreamMeta?.bitrate ? Math.round(activeStreamMeta.bitrate / 1000) + ' kbps' : audioQuality} • Itag: ${activeStreamMeta?.itag || 'N/A'} • Click to change`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${audioQuality === 'max' ? 'bg-emerald-400' : audioQuality === 'standard' ? 'bg-cyan-400' : 'bg-amber-400'}`} />
+                  <span>{audioQuality.toUpperCase()}</span>
+                  <span className="text-white/40">•</span>
+                  <span>{activeStreamMeta?.bitrate ? `${Math.round(activeStreamMeta.bitrate / 1000)}k` : (audioQuality === 'max' ? '140k' : audioQuality === 'standard' ? '131k' : '72k')}</span>
+                </button>
+              )}
             </div>
           </div>
 

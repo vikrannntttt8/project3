@@ -2,9 +2,21 @@ import { useState, useEffect } from 'react';
 import { usePlayer } from '../../context/PlayerContext.jsx';
 import { formatDuration } from '../../utils/timeFormat.js';
 import AddToPlaylistMenu from '../shared/AddToPlaylistMenu.jsx';
+import ImageWithFallback from '../shared/ImageWithFallback.jsx';
+import BackButton from '../shared/BackButton.jsx';
 
 export default function AlbumView({ browseId, initialData }) {
-  const { navigateTo, goBack, playAlbum, currentSong, isPlaying, togglePlay, isLiked, toggleLike } = usePlayer();
+  const {
+    navigateTo,
+    goBack,
+    playAlbum,
+    currentSong,
+    isPlaying,
+    togglePlay,
+    isLiked,
+    toggleLike,
+    handleEntityClick,
+  } = usePlayer();
   const [data, setData] = useState(initialData || null);
   const [loading, setLoading] = useState(!initialData?.tracks);
   const [error, setError] = useState(null);
@@ -51,13 +63,7 @@ export default function AlbumView({ browseId, initialData }) {
     <div className="h-full w-full overflow-y-auto pb-32 pt-4 px-4 sm:px-8 space-y-8 scroll-smooth">
       {/* ── Top Navigation Bar ── */}
       <div className="flex items-center gap-4">
-        <button
-          onClick={goBack}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors text-label-md"
-        >
-          <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          <span>Back</span>
-        </button>
+        <BackButton label="Back" />
         <span className="text-body-sm text-outline">/ Album Release</span>
       </div>
 
@@ -85,12 +91,7 @@ export default function AlbumView({ browseId, initialData }) {
       {error && !loading && (
         <div className="p-6 rounded-2xl bg-brand-pink/10 border border-brand-pink/20 text-center space-y-3">
           <p className="text-body-lg text-brand-pink font-semibold">{error}</p>
-          <button
-            onClick={goBack}
-            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-label-md"
-          >
-            Return to Previous View
-          </button>
+          <BackButton label="Return to Previous View" className="px-4 py-2 bg-white/10 hover:bg-white/20" />
         </div>
       )}
 
@@ -100,17 +101,13 @@ export default function AlbumView({ browseId, initialData }) {
           {/* Header Banner */}
           <div className="relative rounded-3xl overflow-hidden bg-gradient-to-b from-brand-violet/20 via-[#141419] to-[#09090B] border border-white/10 p-6 sm:p-8 shadow-2xl">
             <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 sm:gap-8">
-              {data.thumbnail || data.cover ? (
-                <img
-                  src={data.thumbnail || data.cover}
-                  alt={data.title}
-                  className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl object-cover border-2 border-white/10 shadow-2xl flex-shrink-0"
-                />
-              ) : (
-                <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-white/10 flex items-center justify-center border border-white/10 flex-shrink-0">
-                  <span className="material-symbols-outlined text-[64px] text-white/30">album</span>
-                </div>
-              )}
+              <ImageWithFallback
+                src={data.thumbnail || data.cover}
+                alt={data.title}
+                icon="album"
+                iconClassName="text-white/30 text-[64px]"
+                className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl object-cover border-2 border-white/10 shadow-2xl flex-shrink-0"
+              />
 
               <div className="flex-1 text-center sm:text-left min-w-0 space-y-2.5">
                 <span className="inline-block text-[11px] font-semibold uppercase tracking-wider text-brand-violet px-2.5 py-0.5 rounded-full bg-brand-violet/20 border border-brand-violet/30">
@@ -124,7 +121,7 @@ export default function AlbumView({ browseId, initialData }) {
                   {data.artist && (
                     <button
                       type="button"
-                      onClick={() => navigateTo('artist', data.artistId, { name: data.artist })}
+                      onClick={() => handleEntityClick({ type: 'artist', id: data.artistId, browseId: data.artistId, name: data.artist })}
                       className="font-semibold text-white hover:text-brand-violet hover:underline transition-colors"
                     >
                       {data.artist}

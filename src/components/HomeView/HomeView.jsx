@@ -22,7 +22,7 @@ const TAB_LABELS = {
 };
 
 export default function HomeView() {
-  const { loadSong, playCollection, currentSong, isPlaying, togglePlay, navigateTo } = usePlayer();
+  const { loadSong, playCollection, currentSong, isPlaying, togglePlay, navigateTo, handleEntityClick } = usePlayer();
   const { query, results, loading, error, activeTab, search, switchTab, clear } = useMusicSearch();
 
   const [addMenuSong, setAddMenuSong]   = useState(null); // song to add to playlist
@@ -39,18 +39,21 @@ export default function HomeView() {
   }, [currentSong, togglePlay, loadSong, results, activeTab]);
 
   const handleAlbumClick = useCallback((album) => {
-    navigateTo('album', album.id || album.browseId, {
+    handleEntityClick({
+      ...album,
+      id: album.id || album.browseId,
       title: album.title || album.name,
       artist: album.artist,
       cover: album.image || album.thumbnail,
-    });
-  }, [navigateTo]);
+      type: 'album',
+    }, { preferType: 'album' });
+  }, [handleEntityClick]);
 
   const handleArtistClick = useCallback((artist) => {
     const name = typeof artist === 'string' ? artist : (artist.title || artist.name);
     const id = typeof artist === 'string' ? null : (artist.id || artist.browseId);
-    navigateTo('artist', id, { name });
-  }, [navigateTo]);
+    handleEntityClick({ id, name, type: 'artist' }, { preferType: 'artist' });
+  }, [handleEntityClick]);
 
   const handlePlaylistClick = useCallback(async (playlist) => {
     setDetailLoading(true);

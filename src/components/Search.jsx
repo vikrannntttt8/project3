@@ -23,7 +23,7 @@ const TABS = [
  * - Integrated navigation to Artist and Album views
  */
 export default function Search({ onSelectTrack, onArtistClick }) {
-  const { navigateTo, loadSong, isLiked, toggleLike } = usePlayer();
+  const { navigateTo, loadSong, isLiked, toggleLike, handleEntityClick } = usePlayer();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [results, setResults] = useState([]);
@@ -101,15 +101,18 @@ export default function Search({ onSelectTrack, onArtistClick }) {
     if (onArtistClick) {
       onArtistClick(artistName, artistId);
     }
-    navigateTo('artist', artistId, { name: artistName });
+    handleEntityClick({ id: artistId, name: artistName, type: 'artist' }, { preferType: 'artist' });
   };
 
   const handleAlbumNavigation = (album) => {
-    navigateTo('album', album.browseId || album.id, {
+    handleEntityClick({
+      ...album,
+      id: album.browseId || album.id,
       title: album.title,
       artist: album.artist,
       cover: album.thumbnail || album.cover,
-    });
+      type: 'album',
+    }, { preferType: 'album' });
   };
 
   return (
@@ -285,7 +288,20 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                         <span className="text-label-md font-semibold text-white truncate group-hover:text-brand-violet transition-colors">
                           {track.title}
                         </span>
-                        {track.isOfficial ? (
+                        {track.isMusicVideo || track.isRemix || (!track.album && !track.albumId) ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEntityClick(track, { preferType: 'single' });
+                            }}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-pink/20 text-brand-pink hover:bg-brand-pink/30 border border-brand-pink/30 flex-shrink-0 transition-colors"
+                            title="Open Single / Video View"
+                          >
+                            <span className="material-symbols-outlined text-[12px]">smart_display</span>
+                            <span>{track.isMusicVideo ? 'Video' : 'Single'}</span>
+                          </button>
+                        ) : track.isOfficial ? (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-violet/20 text-brand-violet border border-brand-violet/30 flex-shrink-0">
                             Official
                           </span>
@@ -311,7 +327,22 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                         {track.album && (
                           <>
                             <span>•</span>
-                            <span className="truncate">{track.album}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEntityClick({
+                                  id: track.albumId || track.albumBrowseId,
+                                  title: track.album,
+                                  artist: track.artist,
+                                  type: 'album',
+                                }, { preferType: 'album' });
+                              }}
+                              className="hover:text-white hover:underline focus:outline-none transition-colors text-left truncate"
+                              title={`View album: ${track.album}`}
+                            >
+                              {track.album}
+                            </button>
                           </>
                         )}
                       </div>
@@ -319,6 +350,19 @@ export default function Search({ onSelectTrack, onArtistClick }) {
                   </div>
 
                   <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-3">
+                    {/* View Single/Video details button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEntityClick(track);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-white/10 text-outline hover:text-white transition-colors"
+                      title="View Details / Context"
+                    >
+                      <span className="material-symbols-outlined text-[19px]">info</span>
+                    </button>
+
                     {/* Like button */}
                     <button
                       type="button"

@@ -12,6 +12,7 @@ export default function PlayerDock() {
     togglePlay, playNext, playPrev,
     isLiked, toggleLike,
     isSettingsOpen,
+    audioQuality, setAudioQuality, activeStreamMeta,
   } = usePlayer();
 
   const [addMenuSong, setAddMenuSong] = useState(null);
@@ -134,8 +135,33 @@ export default function PlayerDock() {
             <SeekBar currentTime={currentTime} duration={duration} onSeek={seek} />
           </div>
 
-          {/* ── Right: Lyrics + Volume ────────────────────────── */}
-          <div className="flex items-center gap-2 sm:gap-3 w-[70px] sm:w-[190px] justify-end flex-shrink-0">
+          {/* ── Right: Lyrics + Volume + Bitrate ────────────────────────── */}
+          <div className="flex items-center gap-2 sm:gap-3 w-[80px] sm:w-[260px] justify-end flex-shrink-0">
+            {/* Active Bitrate / Format Badge (Click to cycle quality: max -> standard -> datasaver) */}
+            {currentSong && (
+              <button
+                type="button"
+                onClick={() => {
+                  const nextQ = audioQuality === 'max' ? 'standard' : audioQuality === 'standard' ? 'datasaver' : 'max';
+                  setAudioQuality(nextQ);
+                }}
+                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.06] hover:bg-white/12 border border-white/10 text-[10px] font-mono text-on-surface-variant hover:text-white transition-all cursor-pointer select-none"
+                title={`Bitrate: ${activeStreamMeta?.bitrate ? Math.round(activeStreamMeta.bitrate / 1000) + ' kbps' : audioQuality.toUpperCase()} • Codec: ${activeStreamMeta?.mimeType ? activeStreamMeta.mimeType.split(';')[0].replace('audio/', '') : 'auto'} • Click to cycle quality`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${audioQuality === 'max' ? 'bg-emerald-400' : audioQuality === 'standard' ? 'bg-cyan-400' : 'bg-amber-400'}`} />
+                <span className="font-semibold uppercase tracking-wider text-[9px] text-white/90">{audioQuality}</span>
+                <span className="text-white/30">•</span>
+                <span className="text-white/80">
+                  {activeStreamMeta?.bitrate 
+                    ? `${Math.round(activeStreamMeta.bitrate / 1000)}k` 
+                    : (audioQuality === 'max' ? '140k' : audioQuality === 'standard' ? '131k' : '72k')}
+                </span>
+                {activeStreamMeta?.itag && (
+                  <span className="text-white/40 text-[8px]">#{activeStreamMeta.itag}</span>
+                )}
+              </button>
+            )}
+
             {/* Lyrics toggle */}
             <button
               onClick={toggleView}

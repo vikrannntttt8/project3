@@ -61,9 +61,10 @@ function innertubeApiPlugin() {
         // ── 2. GET /api/stream/:id ────────────────────────────────────────
         if (pathname.startsWith('/api/stream/') && req.method === 'GET') {
           const videoId = pathname.replace('/api/stream/', '').split('?')[0];
+          const quality = parsedUrl.searchParams.get('quality') || 'max';
           try {
             const { resolveAudioStream } = await import('./src/services/innertube.js');
-            const streamInfo = await resolveAudioStream(videoId);
+            const streamInfo = await resolveAudioStream(videoId, quality);
 
             // If JSON requested via query param or Accept header
             if (parsedUrl.searchParams.get('format') === 'json' || req.headers.accept?.includes('application/json')) {

@@ -3,9 +3,20 @@ import { usePlayer } from '../../context/PlayerContext.jsx';
 import { formatDuration } from '../../utils/timeFormat.js';
 import AddToPlaylistMenu from '../shared/AddToPlaylistMenu.jsx';
 import ImageWithFallback from '../shared/ImageWithFallback.jsx';
+import BackButton from '../shared/BackButton.jsx';
 
 export default function ArtistView({ browseId, artistName }) {
-  const { navigateTo, goBack, loadSong, currentSong, isPlaying, togglePlay, isLiked, toggleLike } = usePlayer();
+  const {
+    navigateTo,
+    goBack,
+    loadSong,
+    currentSong,
+    isPlaying,
+    togglePlay,
+    isLiked,
+    toggleLike,
+    handleEntityClick,
+  } = usePlayer();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -69,13 +80,7 @@ export default function ArtistView({ browseId, artistName }) {
     <div className="h-full w-full overflow-y-auto pb-36 pt-4 px-4 sm:px-8 space-y-8 scroll-smooth">
       {/* ── Top Bar Navigation ── */}
       <div className="flex items-center gap-4">
-        <button
-          onClick={goBack}
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-colors text-label-md"
-        >
-          <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          <span>Back</span>
-        </button>
+        <BackButton label="Back" />
         <span className="text-body-sm text-outline">/ Artist Discography</span>
       </div>
 
@@ -98,12 +103,7 @@ export default function ArtistView({ browseId, artistName }) {
       {error && !loading && (
         <div className="p-6 rounded-2xl bg-brand-pink/10 border border-brand-pink/20 text-center space-y-3">
           <p className="text-body-lg text-brand-pink font-semibold">{error}</p>
-          <button
-            onClick={goBack}
-            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-label-md"
-          >
-            Return to Previous View
-          </button>
+          <BackButton label="Return to Previous View" className="px-4 py-2 bg-white/10 hover:bg-white/20" />
         </div>
       )}
 
@@ -288,7 +288,7 @@ export default function ArtistView({ browseId, artistName }) {
                 {data.albums.map((alb, i) => (
                   <div
                     key={alb.id || alb.browseId || i}
-                    onClick={() => navigateTo('album', alb.browseId || alb.id, { title: alb.title, artist: data.name, cover: alb.thumbnail })}
+                    onClick={() => handleEntityClick(alb, { target: 'album' })}
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-violet/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
@@ -333,7 +333,7 @@ export default function ArtistView({ browseId, artistName }) {
                 {data.singles.map((single, i) => (
                   <div
                     key={single.id || single.browseId || i}
-                    onClick={() => navigateTo('album', single.browseId || single.id, { title: single.title, artist: data.name, cover: single.thumbnail })}
+                    onClick={() => handleEntityClick(single, { target: 'album' })}
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-cyan/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
@@ -378,16 +378,7 @@ export default function ArtistView({ browseId, artistName }) {
                 {data.videos.map((vid, i) => (
                   <div
                     key={vid.id || vid.videoId || i}
-                    onClick={() => loadSong({
-                      id: vid.videoId || vid.id,
-                      videoId: vid.videoId || vid.id,
-                      title: vid.title,
-                      artist: vid.artist || data.name,
-                      thumbnail: vid.thumbnail,
-                      cover: vid.cover || vid.thumbnail,
-                      duration: vid.duration,
-                      type: 'song',
-                    })}
+                    onClick={() => handleEntityClick(vid, { target: 'video' })}
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-rose-400/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-video rounded-xl overflow-hidden mb-3 bg-neutral-900">
@@ -437,7 +428,7 @@ export default function ArtistView({ browseId, artistName }) {
                 {data.playlists.map((pl, i) => (
                   <div
                     key={pl.id || pl.browseId || i}
-                    onClick={() => navigateTo('album', pl.browseId || pl.id, { title: pl.title, artist: data.name, cover: pl.thumbnail })}
+                    onClick={() => handleEntityClick(pl, { target: 'album' })}
                     className="group flex flex-col p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-amber-400/30 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-neutral-900">
@@ -481,7 +472,7 @@ export default function ArtistView({ browseId, artistName }) {
                 {data.similarArtists.map((art, i) => (
                   <div
                     key={art.id || art.browseId || i}
-                    onClick={() => navigateTo('artist', art.browseId || art.id, { name: art.name })}
+                    onClick={() => handleEntityClick(art, { target: 'artist' })}
                     className="group flex flex-col items-center text-center p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-brand-violet/40 hover:bg-white/[0.06] transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl"
                   >
                     <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden mb-3 border-2 border-white/10 group-hover:border-brand-violet/60 transition-colors shadow-md">

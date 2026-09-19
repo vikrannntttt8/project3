@@ -27,42 +27,126 @@ export function PlayerProvider({ children }) {
   const [queueIndex,  setQueueIndex]  = useState(0);
 
   // ── Lyrics state ──────────────────────────────────────────────────
+  // ── Lyrics state ──────────────────────────────────────────────────
   const [lrcString,    setLrcString]    = useState(DEMO_LRC);
   const [lyricsSource, setLyricsSource] = useState('demo');
   const [lyricsLoading, setLyricsLoading] = useState(false);
 
-  // ── View & Navigation state ───────────────────────────────────────
-  // State: { view: 'home' | 'search' | 'artist' | 'album' | 'lyrics' | 'library' | 'liked', currentId: string | null, extra: any }
-  const [navState, setNavState] = useState({ view: 'home', currentId: null, extra: null });
+  // ── View & Navigation state with HTML5 History integration ────────
+  // State: { view: 'home' | 'search' | 'artist' | 'album' | 'single' | 'lyrics' | 'library' | 'liked', currentId: string | null, extra: any }
+  const [navState, setNavState] = useState(() => {
+    if (typeof window !== 'undefined' && window.history.state?.view) {
+      return window.history.state;
+    }
+    return { view: 'home', currentId: null, extra: null };
+  });
   const [navHistory, setNavHistory] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  // ── Audio Quality & Stream Bitrate State (max | standard | datasaver) ──
+  const [audioQuality, setAudioQualityState] = useState(() => {
+    if (typeof window === 'undefined') return 'max';
+    const saved = localStorage.getItem('pulse_audio_quality');
+    if (saved === 'high' || saved === 'max') return 'max';
+    if (saved === 'medium' || saved === 'standard') return 'standard';
+    if (saved === 'data-saver' || saved === 'datasaver' || saved === 'low') return 'datasaver';
+    return 'max';
+  });
+  const [activeStreamMeta, setActiveStreamMeta] = useState(null);
+  const [streamToast, setStreamToast] = useState(null);
+
   const view = navState.view;
-  const setView = useCallback((newView) => {
-    setNavState((prev) => {
-      setNavHistory((h) => [...h, prev]);
-      return { view: newView, currentId: null, extra: null };
-    });
+
+  // Sync with browser popstate (back / forward buttons)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePopState = (e) => {
+      const state = e.state;
+      if (state && state.view) {
+        setNavState(state);
+      } else {
+        setNavState({ view: 'home', currentId: null, extra: null });
+      }
+      setNavHistory((prev) => (prev.length > 0 ? prev.slice(0, -1) : []));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const navigateTo = useCallback((newView, currentId = null, extra = null) => {
+    const nextState = { view: newView, currentId, extra };
     setNavState((prev) => {
       setNavHistory((h) => [...h, prev]);
-      return { view: newView, currentId, extra };
+      if (typeof window !== 'undefined') {
+        const url = newView === 'home' ? '/'
+          : newView === 'search' ? '/search'
+          : newView === 'artist' ? `/artist/${currentId || ''}`
+          : newView === 'album' ? `/album/${currentId || ''}`
+          : newView === 'single' ? `/single/${currentId || ''}`
+          : `/${newView}`;
+        window.history.pushState(nextState, '', url);
+      }
+      return nextState;
     });
   }, []);
 
+  const setView = useCallback((newView) => {
+    navigateTo(newView, null, null);
+  }, [navigateTo]);
+
   const goBack = useCallback(() => {
-    setNavHistory((h) => {
-      if (h.length === 0) {
-        setNavState({ view: 'home', currentId: null, extra: null });
-        return [];
+    if (typeof window !== 'undefined' && (navHistory.length > 0 || window.history.length > 1)) {
+      setNavHistory((h) => {
+        if (h.length === 0) {
+          setNavState({ view: 'home', currentId: null, extra: null });
+          return [];
+        }
+        const nextH = [...h];
+        const prev = nextH.pop();
+        setNavState(prev || { view: 'home', currentId: null, extra: null });
+        return nextH;
+      });
+      window.history.back();
+    } else {
+      setNavState({ view: 'home', currentId: null, extra: null });
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({ view: 'home', currentId: null, extra: null }, '', '/');
       }
-      const nextH = [...h];
-      const prev = nextH.pop();
-      setNavState(prev || { view: 'home', currentId: null, extra: null });
-      return nextH;
-    });
+    }
+  }, [navHistory.length]);
+
+  const canGoBack = navHistory.length > 0 || (typeof window !== 'undefined' && window.history.length > 1);
+
+  // Set audio quality and update active stream format
+  const setAudioQuality = useCallback(async (newQuality) => {
+    let norm = 'max';
+    if (newQuality === 'medium' || newQuality === 'standard') norm = 'standard';
+    else if (newQuality === 'data-saver' || newQuality === 'datasaver' || newQuality === 'low') norm = 'datasaver';
+
+    setAudioQualityState(norm);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pulse_audio_quality', norm);
+    }
+
+    const targetVideoId = currentSongRef.current?.videoId || currentSongRef.current?.id;
+    if (targetVideoId) {
+      try {
+        const res = await fetch(`/api/stream/${targetVideoId}?format=json&quality=${norm}`);
+        if (res.ok) {
+          const meta = await res.json();
+          setActiveStreamMeta(meta);
+          setStreamToast({
+            title: `Bitrate: ${meta.qualityLabel}`,
+            detail: `${meta.mimeType} · itag ${meta.itag} · ${meta.kbps}`,
+          });
+          setTimeout(() => setStreamToast(null), 3500);
+        }
+      } catch {
+        // non-blocking
+      }
+    }
   }, []);
 
   // ── Library (liked + playlists + custom albums) ───────────────────
@@ -323,7 +407,77 @@ export function PlayerProvider({ children }) {
       })
       .catch(() => {})
       .finally(() => setLyricsLoading(false));
-  }, [executeLoadSong]);
+
+    // Fetch stream metadata async for quality bitrate verification
+    const targetVid = cleanSong.videoId || cleanSong.youtubeId || cleanSong.id;
+    if (targetVid) {
+      fetch(`/api/stream/${targetVid}?format=json&quality=${audioQuality}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((meta) => {
+          if (meta) {
+            setActiveStreamMeta(meta);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [executeLoadSong, audioQuality]);
+
+  // ── Centralized Contextual Entity Click Router ─────────────────────
+  const handleEntityClick = useCallback((item, options = {}) => {
+    if (!item) return;
+
+    // 1. Explicit or contextual Artist target
+    const isArtist = item.type === 'artist' ||
+      options.target === 'artist' ||
+      (item.browseId && item.browseId.startsWith('UC')) ||
+      (item.channelId && !item.videoId);
+
+    if (isArtist) {
+      const artistId = item.browseId || item.channelId || item.artistId || item.id;
+      const artistName = item.name || item.title || item.artist || 'Artist';
+      navigateTo('artist', artistId, { name: artistName, cover: item.thumbnail || item.cover });
+      return;
+    }
+
+    // 2. Explicit or contextual Album target
+    const isAlbum = item.type === 'album' ||
+      options.target === 'album' ||
+      (item.browseId && (item.browseId.startsWith('MPRE') || item.browseId.startsWith('FEmusic_library_privately_owned_release'))) ||
+      (item.albumId && !item.videoId);
+
+    if (isAlbum) {
+      const albumId = item.browseId || item.albumId || item.id;
+      const albumTitle = item.title || item.album || 'Album';
+      navigateTo('album', albumId, {
+        title: albumTitle,
+        artist: item.artist || item.author,
+        cover: item.thumbnail || item.cover,
+        year: item.year,
+      });
+      return;
+    }
+
+    // 3. Music Video, Standalone Single, or Remix
+    const isVideo = item.type === 'video' || item.isMusicVideo || item.isVideo || item.views ||
+      (item.duration && !item.album && (item.title?.toLowerCase().includes('video') || item.title?.toLowerCase().includes('live')));
+    const isStandaloneSingle = item.isSingle || (!item.album && (item.videoId || item.id));
+
+    if (options.target === 'single' || options.target === 'video' || (options.openView && (isVideo || isStandaloneSingle))) {
+      const targetId = item.videoId || item.id;
+      loadSong(item);
+      navigateTo('single', targetId, item);
+      return;
+    }
+
+    // 4. Clicking Track row/cover when track has album and options.navigateAlbum is requested
+    if (options.navigateAlbum && item.albumId) {
+      navigateTo('album', item.albumId, { title: item.album, artist: item.artist, cover: item.cover });
+      return;
+    }
+
+    // 5. Default track play behavior
+    loadSong(item, options.queue, options.queueIndex);
+  }, [navigateTo, loadSong]);
 
   // ── Queue navigation ──────────────────────────────────────────────
   const playNext = useCallback(() => {
@@ -373,8 +527,11 @@ export function PlayerProvider({ children }) {
     currentSong, queue, queueIndex,
     lrcString, lyricsSource, lyricsLoading,
     view, setView,
-    navState, setNavState, navigateTo, goBack, playAlbum,
+    navState, setNavState, navigateTo, goBack, canGoBack, navHistory, playAlbum,
+    handleEntityClick,
     isSettingsOpen, setIsSettingsOpen,
+    // Audio Quality & Bitrate
+    audioQuality, setAudioQuality, activeStreamMeta, streamToast, setStreamToast,
     // Actions
     play, pause, togglePlay, seek, changeVolume, toggleMute,
     loadSong, playNext, playPrev, playCollection, toggleView,
